@@ -1,0 +1,170 @@
+# AI Prompts And Schema
+
+## Muc tieu
+
+Prompt engineering cua module AI phai phuc vu dung yeu cau cua thay: AI chi de xuat/viet code/giai thich, con nguoi moi la nguoi phe duyet va code chi chay local sau khi duoc approve.
+
+Prompt khong duoc de AI tra ve markdown lan man. Provider that nhu Gemini/OpenAI/Ollama can tra JSON dung schema de backend validate truoc khi hien thi cho frontend.
+
+Implementation source:
+
+```text
+backend/app/services/prompt_builder.py
+```
+
+## Nguyen tac prompt bat buoc
+
+- AI khong duoc thuc thi code.
+- AI khong duoc bia so lieu, cot, bieu do, hinh anh hoac ket qua.
+- AI chi duoc dung dataset context do backend gui vao.
+- Neu chua co execution artifact, AI khong duoc ket luan bang so lieu.
+- Code Python phai gia dinh dataframe dau vao ten la `df`.
+- Truoc khi bien doi du lieu, code phai dung `work_df = df.copy()`.
+- Code khong duoc sua `df` goc.
+- Code chi duoc ghi artifact vao `outputs_dir`.
+- Code khong duoc doc file khac, goi shell, goi network, import module nguy hiem.
+- Code phai co comment tieng Viet giai thich thao tac quan trong.
+- Response phai la JSON thuan, khong boc markdown.
+
+## System Prompt
+
+System prompt duoc dinh nghia trong `SYSTEM_PROMPT`:
+
+```text
+Ban la AI ho tro phan tich du lieu trong mot ung dung local.
+
+Vai tro cua ban:
+- De xuat huong phan tich khi nguoi dung chua ro nen lam gi.
+- Tao code Python phan tich du lieu theo yeu cau cua nguoi dung.
+- Giai thich code va ket qua dua tren du lieu/artifact he thong cung cap.
+
+Quy tac bat buoc:
+- Khong duoc thuc thi code.
+- Khong duoc tu y them so lieu, ten cot, hinh anh, bieu do hoac ket qua khong co trong context.
+- Khong duoc ket luan bang so lieu neu chua co ket qua thuc thi/artifact.
+- Code Python phai gia dinh dataframe dau vao ten la df.
+- Truoc khi bien doi du lieu, code phai tao ban sao: work_df = df.copy().
+- Khong duoc sua df goc, khong duoc ghi de dataset goc.
+- Chi duoc ghi output vao outputs_dir do backend cung cap.
+- Khong duoc doc file khac, goi shell, goi network, import module nguy hiem.
+- Moi khoi code quan trong phai co comment tieng Viet giai thich thao tac.
+- Tra ve duy nhat JSON dung schema, khong boc markdown, khong them van ban ben ngoai JSON.
+```
+
+## User Prompt Payload
+
+Backend gui user prompt duoi dang JSON:
+
+```json
+{
+  "task": "Create an AI proposal for a human-in-the-loop data analysis workflow.",
+  "mode": "generate_code",
+  "user_request": "Ve doanh thu theo thang",
+  "dataset_context": {
+    "dataset_id": "sales_2025",
+    "name": "sales_2025.csv",
+    "row_count": 4,
+    "status": "ready",
+    "columns": [
+      {
+        "name": "date",
+        "dtype": "object",
+        "nullable_count": 0,
+        "sample_values": ["2025-01-05"]
+      },
+      {
+        "name": "revenue",
+        "dtype": "int64",
+        "nullable_count": 0,
+        "sample_values": [1240000]
+      }
+    ]
+  },
+  "allowed_libraries": ["pandas", "numpy", "matplotlib", "seaborn", "math", "statistics"],
+  "runtime_contract": {
+    "input_dataframe_name": "df",
+    "output_directory_variable": "outputs_dir",
+    "must_copy_dataframe_before_mutation": "work_df = df.copy()",
+    "execution": "The backend will show code to the user first. Execution happens only after approval."
+  },
+  "response_schema": {
+    "type": "object"
+  }
+}
+```
+
+## Proposal Schema
+
+Response bat buoc co cac field:
+
+```json
+{
+  "summary": "string",
+  "code": "string",
+  "explanation": "string",
+  "assumptions": ["string"],
+  "risk_flags": ["creates_chart_file"],
+  "expected_outputs": ["table", "chart", "log"]
+}
+```
+
+`risk_flags` hop le:
+
+- `changes_dtype`
+- `creates_chart_file`
+- `creates_table_file`
+- `creates_table_stdout`
+- `drops_rows`
+- `filters_outliers`
+- `needs_human_check`
+- `uses_statistical_model`
+
+`expected_outputs` hop le:
+
+- `text`
+- `table`
+- `chart`
+- `log`
+
+## Vi Du Response Tot
+
+```json
+{
+  "summary": "Tinh tong doanh thu theo thang va ve line chart.",
+  "code": "# Doan code nay tao ban sao dataframe de khong thay doi du lieu goc.\nwork_df = df.copy()\n\n# Doan code nay chuyen cot date sang kieu ngay thang de co the nhom theo thang.\nwork_df[\"date\"] = pd.to_datetime(work_df[\"date\"])\n\n# Doan code nay tao cot month va tinh tong revenue theo tung thang.\nwork_df[\"month\"] = work_df[\"date\"].dt.to_period(\"M\").astype(str)\nmonthly = work_df.groupby(\"month\", as_index=False)[\"revenue\"].sum()\n\n# Doan code nay ve bieu do va luu vao outputs_dir cua lan chay.\nplt.figure(figsize=(10, 5))\nplt.plot(monthly[\"month\"], monthly[\"revenue\"], marker=\"o\")\nplt.xticks(rotation=45)\nplt.tight_layout()\nplt.savefig(outputs_dir / \"revenue_by_month.png\")\n\n# Doan code nay in bang tong hop de frontend hien thi.\nprint(monthly.to_string(index=False))",
+  "explanation": "Code tao ban sao df, chuyen date sang datetime, nhom revenue theo thang, in bang tong hop va luu line chart vao outputs_dir.",
+  "assumptions": ["Cot date la ngay giao dich", "Cot revenue la doanh thu"],
+  "risk_flags": ["changes_dtype", "creates_chart_file", "creates_table_stdout"],
+  "expected_outputs": ["table", "chart", "log"]
+}
+```
+
+## Prompt Cho Che Do Goi Y Phan Tich
+
+Dung khi nguoi dung chua biet nen hoi gi:
+
+```text
+Dua tren dataset_context, hay de xuat cac cau hoi phan tich co the tra loi bang cac cot hien co.
+Moi goi y can neu: muc dich, cot can dung, bieu do phu hop, va ly do huu ich.
+Khong tao so lieu gia dinh. Khong nhac cot khong co trong dataset_context.
+```
+
+## Prompt Cho Che Do Giai Thich Ket Qua
+
+Chi dung sau khi code da chay va co artifact:
+
+```text
+Hay giai thich ket qua dua tren artifact summary duoc cung cap.
+Chi duoc nhac so lieu co trong artifact.
+Neu can them thong tin, hay noi ro can chay phan tich nao tiep theo.
+```
+
+## Tieu Chi Review Prompt
+
+- Response parse duoc bang JSON parser.
+- Field `code` co comment tieng Viet.
+- Code bat dau bang hoac co `work_df = df.copy()` truoc bien doi.
+- Code khong dung cot nam ngoai dataset context.
+- Code khong doc/ghi file tuy tien.
+- Code chi luu output qua `outputs_dir`.
+- Neu prompt la explain result, AI chi giai thich tu artifact da co.
