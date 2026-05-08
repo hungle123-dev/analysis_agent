@@ -47,7 +47,12 @@ def ensure_sample_data() -> None:
 def read_dataset(dataset_id: str) -> pd.DataFrame:
     if dataset_id not in DATASETS:
         raise KeyError(dataset_id)
-    return pd.read_csv(DATASETS[dataset_id]["path"])
+    dataset_path = Path(DATASETS[dataset_id]["path"])
+    if not dataset_path.exists():
+        ensure_sample_data()
+    if not dataset_path.exists():
+        raise FileNotFoundError(f"Registered dataset file is missing: {dataset_path}")
+    return pd.read_csv(dataset_path)
 
 
 def list_datasets() -> list[DatasetSummary]:
