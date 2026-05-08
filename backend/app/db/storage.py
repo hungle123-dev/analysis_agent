@@ -59,7 +59,9 @@ def init_db() -> None:
               stderr TEXT NOT NULL,
               artifacts_json TEXT NOT NULL,
               started_at TEXT NOT NULL,
-              finished_at TEXT NOT NULL
+              finished_at TEXT NOT NULL,
+              duration_ms INTEGER DEFAULT 0,
+              return_code INTEGER DEFAULT 0
             );
 
             CREATE TABLE IF NOT EXISTS audit_events (
@@ -72,6 +74,15 @@ def init_db() -> None:
             );
             """
         )
+        _ensure_execution_columns(conn)
+
+
+def _ensure_execution_columns(conn: sqlite3.Connection) -> None:
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(executions)").fetchall()}
+    if "duration_ms" not in columns:
+        conn.execute("ALTER TABLE executions ADD COLUMN duration_ms INTEGER DEFAULT 0")
+    if "return_code" not in columns:
+        conn.execute("ALTER TABLE executions ADD COLUMN return_code INTEGER DEFAULT 0")
 
 
 def append_event(trace_id: str, event_type: str, actor: str, payload: dict[str, Any]) -> None:

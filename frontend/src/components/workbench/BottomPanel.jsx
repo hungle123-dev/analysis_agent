@@ -16,6 +16,7 @@ export function BottomPanel({
   events,
   executionResult,
   hasResult,
+  policyIssues,
   onClose,
   onResizeStart,
   onTabChange,
@@ -75,7 +76,7 @@ export function BottomPanel({
         )}
         {activeTab === "policy" && (
           <div className="h-full overflow-auto p-3">
-            <PolicyTab />
+            <PolicyTab issues={policyIssues} />
           </div>
         )}
       </div>

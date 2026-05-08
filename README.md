@@ -100,6 +100,26 @@ SQLite Audit Log
 └── AGENTS.md                 # project guidance for coding agents
 ```
 
+## Dataset Visibility Rule
+
+Datasets shown in the frontend dataset list are controlled by `backend/config/datasets.json`.
+
+Each registered dataset can include:
+
+- `allowed`: backend allowlist for dataset usage
+- `visible`: whether the dataset appears in the frontend selector
+
+Example:
+
+```json
+{
+  "id": "vietnam_real_estate_cleaned",
+  "path": "cleaned_vietnam_real_estate.csv",
+  "allowed": true,
+  "visible": true
+}
+```
+
 ## Backend Modules
 
 | Module | Responsibility |
@@ -136,10 +156,14 @@ http://127.0.0.1:8000/docs
 ### 1. Backend
 
 ```powershell
-cd backend
-python -m pip install -r requirements.txt
-cd ..
-python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
+python -m venv .venv
+./.venv/bin/python -m pip install -r backend/requirements.txt
+cp .env.example .env
+# edit .env and set DEEPSEEK_API_KEY (or set AI_PROVIDER=mock for offline demo)
+set -a
+source .env
+set +a
+./.venv/bin/python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
 ```
 
 The backend creates demo CSV files and runtime folders locally when needed. These generated files are ignored by Git.
@@ -147,9 +171,8 @@ The backend creates demo CSV files and runtime folders locally when needed. Thes
 ### 2. Frontend
 
 ```powershell
-cd frontend
-npm install
-npm run dev
+npm install --prefix frontend
+npm run dev --prefix frontend
 ```
 
 Open:
@@ -163,21 +186,19 @@ http://127.0.0.1:5173
 Backend tests:
 
 ```powershell
-python -m pytest backend\tests
+./.venv/bin/python -m pytest backend/tests
 ```
 
 Frontend production build:
 
 ```powershell
-cd frontend
-npm run build
+npm run build --prefix frontend
 ```
 
 Dependency audit:
 
 ```powershell
-cd frontend
-npm audit --audit-level=moderate
+npm audit --audit-level=moderate --prefix frontend
 ```
 
 ## Demo Flow

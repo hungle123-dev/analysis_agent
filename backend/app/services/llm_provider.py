@@ -30,8 +30,12 @@ def get_llm_provider() -> LLMProvider:
         from backend.app.services.mock_llm_provider import MockLLMProvider
 
         return MockLLMProvider()
+    if provider_name == "deepseek":
+        from backend.app.services.deepseek_llm_provider import DeepSeekLLMProvider
+
+        return DeepSeekLLMProvider()
 
     raise RuntimeError(
         f"Unsupported AI_PROVIDER={provider_name!r}. "
-        "Use 'mock' for local demo, or add a provider adapter that implements LLMProvider."
+        "Use 'mock' or 'deepseek', or add a provider adapter that implements LLMProvider."
     )

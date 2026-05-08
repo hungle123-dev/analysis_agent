@@ -73,6 +73,12 @@ class Artifact(BaseModel):
     path: str
 
 
+class PolicyIssue(BaseModel):
+    code: str
+    message: str
+    severity: Literal["error", "warning"] = "error"
+
+
 class ExecutionResponse(BaseModel):
     run_id: str
     proposal_id: str
@@ -80,6 +86,10 @@ class ExecutionResponse(BaseModel):
     stdout: str
     stderr: str
     artifacts: list[Artifact]
+    return_code: int
+    duration_ms: int
+    started_at: str
+    finished_at: str
 
 
 class LogTraceResponse(BaseModel):

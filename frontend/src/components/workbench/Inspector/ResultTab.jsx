@@ -27,6 +27,9 @@ export function ResultTab({ executionResult, hasResult }) {
           <span>Local chart artifact</span>
           <code className="text-xs text-data-blue">{executionResult?.run_id}</code>
         </div>
+        <div className="mb-2 text-[11px] text-dim">
+          return_code={executionResult?.return_code ?? "n/a"} | duration={executionResult?.duration_ms ?? 0}ms
+        </div>
         {chartUrl ? (
           <img alt={chartArtifact.name} className="max-h-48 w-full rounded-md object-contain" src={chartUrl} />
         ) : (

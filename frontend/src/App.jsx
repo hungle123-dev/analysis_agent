@@ -22,6 +22,18 @@ const EMPTY_DATASET = {
 };
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+const normalizePolicyIssues = (issues) =>
+  Array.isArray(issues)
+    ? issues.map((issue) =>
+        typeof issue === "string"
+          ? { code: "policy_error", message: issue, severity: "error" }
+          : {
+              code: issue?.code ?? "policy_error",
+              message: issue?.message ?? JSON.stringify(issue),
+              severity: issue?.severity ?? "error"
+            }
+      )
+    : [];
 
 export default function App() {
   const [datasets, setDatasets] = useState([]);
@@ -34,6 +46,7 @@ export default function App() {
   const [proposal, setProposal] = useState(null);
   const [executionResult, setExecutionResult] = useState(null);
   const [error, setError] = useState("");
+  const [policyIssues, setPolicyIssues] = useState([]);
   const [isPrimarySidebarOpen, setIsPrimarySidebarOpen] = useState(() =>
     typeof window === "undefined" ? true : window.innerWidth > 980
   );
@@ -110,6 +123,7 @@ export default function App() {
       return;
     }
     setError("");
+    setPolicyIssues([]);
     setExecutionResult(null);
     try {
       const nextProposal = await api.createProposal({
@@ -124,6 +138,7 @@ export default function App() {
       setInspectorTab("logs");
       await refreshLogs(nextProposal.trace_id);
     } catch (err) {
+      setPolicyIssues(normalizePolicyIssues(err?.detail?.policy_errors));
       setError(err.message);
     }
   }
@@ -136,6 +151,7 @@ export default function App() {
   async function approveProposal() {
     if (!proposal) return;
     setError("");
+    setPolicyIssues([]);
     try {
       const updated = await api.updateProposal(proposal.proposal_id, {
         edited_by: "student_01",
@@ -150,7 +166,9 @@ export default function App() {
       setInspectorTab("policy");
       await refreshLogs(updated.trace_id);
     } catch (err) {
+      setPolicyIssues(normalizePolicyIssues(err?.detail?.policy_errors));
       setError(err.message);
+      setInspectorTab("policy");
     }
   }
 
@@ -164,6 +182,7 @@ export default function App() {
     if (!canRun || !proposal?.code_hash) return;
     setStatus("running");
     setInspectorTab("logs");
+    setPolicyIssues([]);
     try {
       const result = await api.runExecution({
         proposal_id: proposal.proposal_id,
@@ -178,6 +197,7 @@ export default function App() {
     } catch (err) {
       setStatus("failed");
       setInspectorTab("policy");
+      setPolicyIssues(normalizePolicyIssues(err?.detail?.policy_errors));
       setError(err.message);
     }
   }
@@ -189,6 +209,7 @@ export default function App() {
     setInspectorTab("logs");
     setProposal(null);
     setExecutionResult(null);
+    setPolicyIssues([]);
     setError("");
   }
 
@@ -315,6 +336,7 @@ export default function App() {
               events={events}
               executionResult={executionResult}
               hasResult={hasResult}
+              policyIssues={policyIssues}
               onClose={() => setIsBottomPanelOpen(false)}
               onResizeStart={(event) => startResizePane("bottom", event)}
               onTabChange={setInspectorTab}

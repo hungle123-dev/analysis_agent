@@ -130,6 +130,10 @@ Response:
   "status": "succeeded",
   "stdout": "Saved chart to outputs/run_001/revenue_by_month.png",
   "stderr": "",
+  "return_code": 0,
+  "duration_ms": 1420,
+  "started_at": "2026-05-08T14:05:10.100000+00:00",
+  "finished_at": "2026-05-08T14:05:11.520000+00:00",
   "artifacts": [
     {
       "type": "chart",
@@ -140,12 +144,35 @@ Response:
 }
 ```
 
+`artifacts[].type` chuan hoa:
+
+- `chart`: `.png`, `.jpg`, `.jpeg`, `.svg`, `.webp`
+- `table`: `.csv`, `.json`, `.parquet`, `.xlsx`
+- `log`: `.txt`, `.log`
+- `text`: cac file text khac
+
 Backend phai reject neu:
 
 - proposal chua approved
 - code_hash khong khop
 - code vi pham policy
 - dataset_id khong duoc dang ky
+
+Khi code vi pham policy, backend tra chi tiet:
+
+```json
+{
+  "detail": {
+    "policy_errors": [
+      {
+        "code": "blocked_import",
+        "message": "Import khong duoc phep: os",
+        "severity": "error"
+      }
+    ]
+  }
+}
+```
 
 ## Logs API
 

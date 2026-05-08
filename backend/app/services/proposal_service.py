@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import uuid
 
 from fastapi import HTTPException
@@ -28,7 +29,29 @@ def create_proposal(payload: CreateProposalRequest) -> ProposalResponse:
     proposal_id = f"prop_{uuid.uuid4().hex[:8]}"
     trace_id = f"trace_{uuid.uuid4().hex[:8]}"
     provider = get_llm_provider()
-    draft = provider.create_proposal(payload, context)
+    try:
+        draft = provider.create_proposal(payload, context)
+    except RuntimeError as exc:
+        if _should_fallback_to_mock(provider.name):
+            from backend.app.services.mock_llm_provider import MockLLMProvider
+
+            fallback_provider = MockLLMProvider()
+            draft = fallback_provider.create_proposal(payload, context)
+            append_event(
+                trace_id,
+                "ai.proposal.fallback_to_mock",
+                "system",
+                {"from_provider": provider.name, "reason": str(exc)},
+            )
+            provider = fallback_provider
+        else:
+            append_event(
+                trace_id,
+                "ai.proposal.generation_failed",
+                "system",
+                {"provider": provider.name, "error": str(exc)},
+            )
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
     now = now_iso()
     with connect() as conn:
         conn.execute(
@@ -123,3 +146,9 @@ def get_proposal(proposal_id: str) -> ProposalResponse:
 
 def hash_code(code: str) -> str:
     return "sha256:" + hashlib.sha256(code.encode("utf-8")).hexdigest()
+
+
+def _should_fallback_to_mock(provider_name: str) -> bool:
+    if provider_name == "mock":
+        return False
+    return os.getenv("AI_FALLBACK_TO_MOCK_ON_ERROR", "true").strip().lower() in {"1", "true", "yes", "on"}

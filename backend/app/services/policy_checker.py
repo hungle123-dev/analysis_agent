@@ -1,6 +1,13 @@
 from __future__ import annotations
 
 import ast
+from typing import Literal, TypedDict
+
+
+class PolicyIssue(TypedDict):
+    code: Literal["blocked_import", "blocked_call", "dataset_mutation", "unsafe_output_path", "unsafe_data_read", "syntax_error", "unsafe_internal_access"]
+    message: str
+    severity: Literal["error", "warning"]
 
 ALLOWED_IMPORTS = {
     "math",
@@ -124,34 +131,35 @@ MUTATING_DF_CALLS = {
 }
 
 
-def validate_code(code: str) -> list[str]:
-    errors: list[str] = []
+def validate_code(code: str) -> list[PolicyIssue]:
+    errors: list[PolicyIssue] = []
 
-    def add(message: str) -> None:
-        if message not in errors:
-            errors.append(message)
+    def add(issue_code: PolicyIssue["code"], message: str, severity: PolicyIssue["severity"] = "error") -> None:
+        issue = {"code": issue_code, "message": message, "severity": severity}
+        if issue not in errors:
+            errors.append(issue)
 
     try:
         tree = ast.parse(code)
     except SyntaxError as exc:
-        return [f"Syntax error: {exc}"]
+        return [{"code": "syntax_error", "message": f"Syntax error: {exc}", "severity": "error"}]
 
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 import_name = _format_import(alias.name, alias.asname)
                 if _is_forbidden_module(alias.name) or import_name not in ALLOWED_IMPORTS:
-                    add(f"Import khong duoc phep: {import_name}")
+                    add("blocked_import", f"Import khong duoc phep: {import_name}")
 
         if isinstance(node, ast.ImportFrom):
             module = node.module or ""
             if _is_forbidden_module(module):
-                add(f"Import khong duoc phep: from {module}")
+                add("blocked_import", f"Import khong duoc phep: from {module}")
             else:
                 for alias in node.names:
                     import_name = f"{module}.{alias.name}" if module else alias.name
                     if import_name not in ALLOWED_IMPORTS:
-                        add(f"Import khong duoc phep: from {module} import {alias.name}")
+                        add("blocked_import", f"Import khong duoc phep: from {module} import {alias.name}")
 
         if isinstance(node, ast.Call):
             _validate_call(node, add)
@@ -159,13 +167,13 @@ def validate_code(code: str) -> list[str]:
         if isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
             targets = _assignment_targets(node)
             if any(_touches_original_df(target) for target in targets):
-                add("Khong duoc gan truc tiep vao df goc. Hay tao work_df = df.copy() truoc khi bien doi.")
+                add("dataset_mutation", "Khong duoc gan truc tiep vao df goc. Hay tao work_df = df.copy() truoc khi bien doi.")
 
         if isinstance(node, ast.Attribute) and node.attr.startswith("__"):
-            add(f"Khong duoc truy cap thuoc tinh noi bo: {node.attr}")
+            add("unsafe_internal_access", f"Khong duoc truy cap thuoc tinh noi bo: {node.attr}")
 
         if isinstance(node, ast.Name) and node.id.startswith("__"):
-            add(f"Khong duoc truy cap ten noi bo: {node.id}")
+            add("unsafe_internal_access", f"Khong duoc truy cap ten noi bo: {node.id}")
 
     return errors
 
@@ -174,9 +182,9 @@ def _validate_call(node: ast.Call, add) -> None:
     func = node.func
     if isinstance(func, ast.Name):
         if func.id in FORBIDDEN_CALL_NAMES:
-            add(f"Lenh goi khong an toan bi chan: {func.id}()")
+            add("blocked_call", f"Lenh goi khong an toan bi chan: {func.id}()")
         if func.id in {"Path"}:
-            add("Khong duoc tao duong dan tuy y. Hay dung outputs_dir duoc backend cung cap.")
+            add("unsafe_output_path", "Khong duoc tao duong dan tuy y. Hay dung outputs_dir duoc backend cung cap.")
         return
 
     if not isinstance(func, ast.Attribute):
@@ -184,18 +192,18 @@ def _validate_call(node: ast.Call, add) -> None:
 
     attr = func.attr
     if attr in FORBIDDEN_ATTR_CALLS:
-        add(f"Lenh goi khong an toan bi chan: .{attr}()")
+        add("blocked_call", f"Lenh goi khong an toan bi chan: .{attr}()")
     if attr in DATA_READER_CALLS:
-        add(f"Khong duoc doc them du lieu bang .{attr}(). Backend da nap dataset vao df.")
+        add("unsafe_data_read", f"Khong duoc doc them du lieu bang .{attr}(). Backend da nap dataset vao df.")
     if attr in OUTPUT_WRITER_CALLS and not _call_uses_outputs_dir(node):
-        add(f"Lenh .{attr}() chi duoc ghi vao outputs_dir.")
+        add("unsafe_output_path", f"Lenh .{attr}() chi duoc ghi vao outputs_dir.")
     if attr in MUTATING_DF_CALLS and _is_name(func.value, "df"):
-        add(f"Khong duoc goi df.{attr}() truc tiep tren du lieu goc. Hay dung work_df = df.copy().")
+        add("dataset_mutation", f"Khong duoc goi df.{attr}() truc tiep tren du lieu goc. Hay dung work_df = df.copy().")
     if _is_name(func.value, "df") and any(
         keyword.arg == "inplace" and isinstance(keyword.value, ast.Constant) and keyword.value.value is True
         for keyword in node.keywords
     ):
-        add("Khong duoc bien doi df goc voi inplace=True. Hay thao tac tren work_df.")
+        add("dataset_mutation", "Khong duoc bien doi df goc voi inplace=True. Hay thao tac tren work_df.")
 
 
 def _format_import(name: str, asname: str | None) -> str:

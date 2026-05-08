@@ -1,0 +1,29 @@
+[
+  {
+    "id": "sales_2025",
+    "name": "sales_2025.csv",
+    "path": "data/sales_2025.csv",
+    "description": "Demo sales dataset for workflow validation.",
+    "allowed": true,
+    "created_by": "system",
+    "visible": false
+  },
+  {
+    "id": "customer_segments",
+    "name": "customer_segments.csv",
+    "path": "data/customer_segments.csv",
+    "description": "Demo customer segmentation dataset.",
+    "allowed": true,
+    "created_by": "system",
+    "visible": false
+  },
+  {
+    "id": "vietnam_real_estate_cleaned",
+    "name": "cleaned_vietnam_real_estate.csv",
+    "path": "cleaned_vietnam_real_estate.csv",
+    "description": "Processed Vietnam real estate listings for analysis.",
+    "allowed": true,
+    "created_by": "student",
+    "visible": true
+  }
+]

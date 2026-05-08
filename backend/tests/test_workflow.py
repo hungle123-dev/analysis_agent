@@ -17,6 +17,7 @@ def client(monkeypatch):
     runtime_dir = Path(__file__).resolve().parents[1] / ".test-runtime" / f"case_{uuid.uuid4().hex}"
     runtime_dir.mkdir(parents=True, exist_ok=True)
 
+    monkeypatch.setenv("AI_PROVIDER", "mock")
     monkeypatch.setattr(storage, "DB_PATH", runtime_dir / "ai_logs.db")
     monkeypatch.setattr(execution_runner, "RUNS_DIR", runtime_dir / "runs")
     monkeypatch.setattr(execution_runner, "ROOT", runtime_dir)
@@ -99,9 +100,9 @@ def test_policy_rejects_unsafe_edited_code(client: TestClient):
 
     assert response.status_code == 400
     errors = response.json()["detail"]["policy_errors"]
-    assert any("Import khong duoc phep: os" in error for error in errors)
-    assert any("Khong duoc gan truc tiep vao df goc" in error for error in errors)
-    assert any(".system()" in error for error in errors)
+    assert any("Import khong duoc phep: os" in error["message"] for error in errors)
+    assert any("Khong duoc gan truc tiep vao df goc" in error["message"] for error in errors)
+    assert any(".system()" in error["message"] for error in errors)
 
 
 def test_approved_proposal_executes_locally_and_returns_artifact(client: TestClient):
@@ -123,3 +124,36 @@ def test_approved_proposal_executes_locally_and_returns_artifact(client: TestCli
     assert body["status"] == "succeeded"
     assert body["artifacts"]
     assert body["artifacts"][0]["type"] == "chart"
+    assert isinstance(body["duration_ms"], int)
+    assert isinstance(body["return_code"], int)
+    assert "started_at" in body
+    assert "finished_at" in body
+
+
+def test_execution_returns_table_artifacts(client: TestClient):
+    proposal = create_proposal(client)
+    edited_code = """
+work_df = df.copy()
+summary = work_df.groupby("region", as_index=False)["revenue"].sum()
+summary.to_csv(outputs_dir / "summary.csv", index=False)
+print(summary.to_string(index=False))
+"""
+    update_response = client.patch(
+        f"/api/ai/proposals/{proposal['proposal_id']}",
+        json={"edited_by": "tester", "edited_code": edited_code},
+    )
+    assert update_response.status_code == 200
+    approval = approve_proposal(client, proposal["proposal_id"])
+
+    execution = client.post(
+        "/api/executions",
+        json={
+            "proposal_id": proposal["proposal_id"],
+            "dataset_id": "sales_2025",
+            "code_hash": approval["code_hash"],
+            "requested_by": "tester",
+        },
+    )
+    assert execution.status_code == 200
+    artifacts = execution.json()["artifacts"]
+    assert any(item["type"] == "table" and item["name"] == "summary.csv" for item in artifacts)

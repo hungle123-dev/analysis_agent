@@ -12,13 +12,17 @@ async function request(path, options = {}) {
   if (!response.ok) {
     const text = await response.text();
     let message = text;
+    let detail = null;
     try {
       const parsed = JSON.parse(text);
+      detail = parsed?.detail ?? null;
       message = typeof parsed.detail === "string" ? parsed.detail : JSON.stringify(parsed.detail);
     } catch {
       message = text;
     }
-    throw new Error(message || `Request failed: ${response.status}`);
+    const error = new Error(message || `Request failed: ${response.status}`);
+    error.detail = detail;
+    throw error;
   }
 
   return response.json();
