@@ -10,11 +10,11 @@ const workflowSteps = [
   "audit log"
 ];
 
-export function DatasetSidebar({ activeDatasetId, dataset, datasets, onDatasetChange }) {
+export function DatasetSidebar({ activeDatasetId, dataset, datasets, onDatasetChange, onResizeStart }) {
   const columns = dataset.columns ?? [];
 
   return (
-    <aside className="min-w-0 overflow-auto border-r border-line bg-shell text-sm max-[760px]:hidden">
+    <aside className="relative min-w-0 overflow-auto border-r border-line bg-shell text-sm max-[980px]:absolute max-[980px]:inset-y-0 max-[980px]:left-11 max-[980px]:z-30 max-[980px]:w-[min(320px,calc(100vw-44px))] max-[980px]:shadow-2xl max-[760px]:left-0 max-[760px]:max-h-[72vh]">
       <ExplorerSection title="Datasets">
         <div className="grid gap-0.5">
           {datasets.map((item) => (
@@ -62,6 +62,7 @@ export function DatasetSidebar({ activeDatasetId, dataset, datasets, onDatasetCh
           ))}
         </div>
       </ExplorerSection>
+      <ResizeHandle ariaLabel="Resize dataset sidebar" edge="right" onResizeStart={onResizeStart} />
     </aside>
   );
 }
@@ -75,5 +76,19 @@ function ExplorerSection({ children, title }) {
       </div>
       <div className="py-1">{children}</div>
     </section>
+  );
+}
+
+function ResizeHandle({ ariaLabel, edge, onResizeStart }) {
+  return (
+    <button
+      aria-label={ariaLabel}
+      className={`absolute top-0 z-20 h-full w-1 cursor-col-resize bg-transparent hover:bg-accent/70 ${
+        edge === "right" ? "right-0" : "left-0"
+      }`}
+      onMouseDown={onResizeStart}
+      title={ariaLabel}
+      type="button"
+    />
   );
 }

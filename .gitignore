@@ -1,5 +1,6 @@
 .planning/
 .pytest_cache/
+.pytest-cache-runtime/
 .env
 .env.*
 !.env.example

@@ -3,13 +3,12 @@ import Editor from "@monaco-editor/react";
 import { api } from "./api/client";
 
 import { ActivityBar } from "./components/workbench/ActivityBar";
-import { GlobalCommandBar } from "./components/workbench/GlobalCommandBar";
 import { DatasetSidebar } from "./components/workbench/DatasetSidebar";
-import { ProposalHeader } from "./components/workbench/ProposalHeader";
-import { ApprovalGate } from "./components/workbench/ApprovalGate";
 import { EditorTabs } from "./components/workbench/EditorTabs";
 import { BottomPanel } from "./components/workbench/BottomPanel";
+import { SecondaryAiSidebar } from "./components/workbench/SecondaryAiSidebar";
 import { StatusBar } from "./components/workbench/StatusBar";
+import { TitleBar } from "./components/workbench/TitleBar";
 
 const EMPTY_CODE = `# Code proposal will appear here after AI generates it.
 # AI-generated code must be reviewed, edited if needed, and approved before local execution.`;
@@ -22,6 +21,8 @@ const EMPTY_DATASET = {
   columns: []
 };
 
+const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+
 export default function App() {
   const [datasets, setDatasets] = useState([]);
   const [activeDatasetId, setActiveDatasetId] = useState("");
@@ -33,6 +34,14 @@ export default function App() {
   const [proposal, setProposal] = useState(null);
   const [executionResult, setExecutionResult] = useState(null);
   const [error, setError] = useState("");
+  const [isPrimarySidebarOpen, setIsPrimarySidebarOpen] = useState(() =>
+    typeof window === "undefined" ? true : window.innerWidth > 980
+  );
+  const [isSecondarySidebarOpen, setIsSecondarySidebarOpen] = useState(true);
+  const [isBottomPanelOpen, setIsBottomPanelOpen] = useState(true);
+  const [primarySidebarWidth, setPrimarySidebarWidth] = useState(286);
+  const [secondarySidebarWidth, setSecondarySidebarWidth] = useState(352);
+  const [bottomPanelHeight, setBottomPanelHeight] = useState(230);
 
   const activeDataset = useMemo(
     () => datasets.find((dataset) => dataset.id === activeDatasetId) ?? datasets[0] ?? EMPTY_DATASET,
@@ -121,7 +130,7 @@ export default function App() {
 
   function updateCode(value) {
     setCode(value ?? "");
-    if (["pending_review", "approved", "succeeded"].includes(status)) setStatus("edited");
+    if (proposal && ["pending_review", "approved", "succeeded"].includes(status)) setStatus("edited");
   }
 
   async function approveProposal() {
@@ -183,27 +192,99 @@ export default function App() {
     setError("");
   }
 
+  function selectActivityItem(id) {
+    if (id === "datasets") {
+      setIsPrimarySidebarOpen((value) => !value);
+      return;
+    }
+    setInspectorTab(id);
+    setIsBottomPanelOpen(true);
+  }
+
+  function startResizePane(kind, event) {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const startPrimaryWidth = primarySidebarWidth;
+    const startSecondaryWidth = secondarySidebarWidth;
+    const startBottomHeight = bottomPanelHeight;
+
+    function onMouseMove(moveEvent) {
+      if (kind === "primary") {
+        setPrimarySidebarWidth(clamp(startPrimaryWidth + moveEvent.clientX - startX, 220, 420));
+      }
+      if (kind === "secondary") {
+        setSecondarySidebarWidth(clamp(startSecondaryWidth - (moveEvent.clientX - startX), 280, 520));
+      }
+      if (kind === "bottom") {
+        setBottomPanelHeight(clamp(startBottomHeight - (moveEvent.clientY - startY), 160, 380));
+      }
+    }
+
+    function onMouseUp() {
+      document.body.classList.remove("select-none", "cursor-col-resize", "cursor-row-resize");
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    }
+
+    document.body.classList.add("select-none", kind === "bottom" ? "cursor-row-resize" : "cursor-col-resize");
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  }
+
+  const mainGridClass = [
+    "relative grid min-h-0 min-w-0",
+    isBottomPanelOpen && isSecondarySidebarOpen
+      ? "max-[980px]:grid-rows-[minmax(0,1fr)_320px]"
+      : "max-[980px]:grid-rows-[minmax(0,1fr)]",
+    isPrimarySidebarOpen && isSecondarySidebarOpen
+      ? "grid-cols-[48px_var(--primary-sidebar-width)_minmax(0,1fr)_var(--secondary-sidebar-width)] max-[1180px]:grid-cols-[44px_var(--primary-sidebar-width)_minmax(0,1fr)_var(--secondary-sidebar-width)]"
+      : isPrimarySidebarOpen
+        ? "grid-cols-[48px_var(--primary-sidebar-width)_minmax(0,1fr)] max-[1180px]:grid-cols-[44px_var(--primary-sidebar-width)_minmax(0,1fr)]"
+        : isSecondarySidebarOpen
+          ? "grid-cols-[48px_minmax(0,1fr)_var(--secondary-sidebar-width)] max-[1180px]:grid-cols-[44px_minmax(0,1fr)_var(--secondary-sidebar-width)]"
+          : "grid-cols-[48px_minmax(0,1fr)] max-[1180px]:grid-cols-[44px_minmax(0,1fr)]",
+    "max-[980px]:grid-cols-[44px_minmax(0,1fr)] max-[760px]:block max-[760px]:h-auto"
+  ].join(" ");
+
+  const editorSectionClass = [
+    "grid min-h-0 min-w-0 overflow-hidden bg-editor max-[980px]:col-start-2 max-[980px]:row-start-1 max-[760px]:min-h-screen",
+    isBottomPanelOpen
+      ? "grid-rows-[minmax(0,1fr)_var(--bottom-panel-height)] max-[980px]:grid-rows-[minmax(0,1fr)_190px]"
+      : "grid-rows-[minmax(0,1fr)]"
+  ].join(" ");
+
   return (
-    <div className="grid h-screen min-h-[720px] grid-rows-[48px_minmax(0,1fr)_24px] overflow-hidden bg-ink text-text-main">
-      <GlobalCommandBar 
-        prompt={prompt}
-        onPromptChange={setPrompt}
-        onGenerate={generateProposal}
+    <div className="grid h-screen min-h-[720px] grid-rows-[36px_minmax(0,1fr)_24px] overflow-hidden bg-ink text-text-main max-[760px]:h-auto max-[760px]:min-h-screen max-[760px]:overflow-auto">
+      <TitleBar
+        isBottomPanelOpen={isBottomPanelOpen}
+        isPrimarySidebarOpen={isPrimarySidebarOpen}
+        isSecondarySidebarOpen={isSecondarySidebarOpen}
+        onToggleBottomPanel={() => setIsBottomPanelOpen((value) => !value)}
+        onTogglePrimarySidebar={() => setIsPrimarySidebarOpen((value) => !value)}
+        onToggleSecondarySidebar={() => setIsSecondarySidebarOpen((value) => !value)}
       />
 
-      <main className="grid min-h-0 min-w-0 grid-cols-[48px_286px_minmax(0,1fr)] max-[980px]:grid-cols-[48px_248px_minmax(0,1fr)] max-[760px]:block max-[760px]:h-auto">
-        <ActivityBar onSelectInspector={setInspectorTab} />
-        <DatasetSidebar
-          activeDatasetId={activeDatasetId}
-          dataset={activeDataset}
-          datasets={datasets}
-          onDatasetChange={setActiveDatasetId}
-        />
+      <main
+        className={mainGridClass}
+        style={{
+          "--bottom-panel-height": `${bottomPanelHeight}px`,
+          "--primary-sidebar-width": `${primarySidebarWidth}px`,
+          "--secondary-sidebar-width": `${secondarySidebarWidth}px`
+        }}
+      >
+        <ActivityBar activePanel={isPrimarySidebarOpen ? "datasets" : inspectorTab} onSelectPanel={selectActivityItem} />
+        {isPrimarySidebarOpen && (
+          <DatasetSidebar
+            activeDatasetId={activeDatasetId}
+            dataset={activeDataset}
+            datasets={datasets}
+            onDatasetChange={setActiveDatasetId}
+            onResizeStart={(event) => startResizePane("primary", event)}
+          />
+        )}
 
-        <section className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)_230px_auto] overflow-hidden bg-editor max-[760px]:min-h-screen">
-          <ProposalHeader proposal={proposal} />
-          {error && <div className="border-y border-rose-soft/30 bg-rose-soft/10 px-4 py-2 text-sm text-[#ffd4da]">{error}</div>}
-
+        <section className={editorSectionClass}>
           <div className="min-h-0 min-w-0 flex flex-col overflow-hidden bg-editor">
             <EditorTabs lineCount={code.split("\n").length} proposalId={proposal?.proposal_id} />
             <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
@@ -227,24 +308,36 @@ export default function App() {
             </div>
           </div>
 
-          <BottomPanel
-            activeTab={inspectorTab}
-            error={error}
-            events={events}
-            executionResult={executionResult}
-            hasResult={hasResult}
-            onTabChange={setInspectorTab}
-          />
-
-          <ApprovalGate
+          {isBottomPanelOpen && (
+            <BottomPanel
+              activeTab={inspectorTab}
+              error={error}
+              events={events}
+              executionResult={executionResult}
+              hasResult={hasResult}
+              onClose={() => setIsBottomPanelOpen(false)}
+              onResizeStart={(event) => startResizePane("bottom", event)}
+              onTabChange={setInspectorTab}
+            />
+          )}
+        </section>
+        {isSecondarySidebarOpen && (
+          <SecondaryAiSidebar
             canRun={canRun}
+            error={error}
             onApprove={approveProposal}
+            onGenerate={generateProposal}
+            onHide={() => setIsSecondarySidebarOpen(false)}
+            onPromptChange={setPrompt}
             onReject={rejectProposal}
             onReset={resetDemo}
+            onResizeStart={(event) => startResizePane("secondary", event)}
             onRun={runLocal}
+            prompt={prompt}
+            proposal={proposal}
             status={status}
           />
-        </section>
+        )}
       </main>
       <StatusBar proposal={proposal} status={status} />
     </div>

@@ -1,5 +1,5 @@
 import React from "react";
-import { AlertCircle, BarChart3, History, ShieldCheck } from "lucide-react";
+import { AlertCircle, BarChart3, History, ShieldCheck, X } from "lucide-react";
 import { LogsTab } from "./Inspector/LogsTab";
 import { PolicyTab } from "./Inspector/PolicyTab";
 import { ResultTab } from "./Inspector/ResultTab";
@@ -10,20 +10,37 @@ const tabs = [
   { id: "policy", label: "Policy", icon: ShieldCheck }
 ];
 
-export function BottomPanel({ activeTab, error, events, executionResult, hasResult, onTabChange }) {
+export function BottomPanel({
+  activeTab,
+  error,
+  events,
+  executionResult,
+  hasResult,
+  onClose,
+  onResizeStart,
+  onTabChange,
+}) {
   return (
-    <section className="grid min-h-0 grid-rows-[34px_minmax(0,1fr)] border-t border-line bg-panel">
+    <section className="relative grid min-h-0 grid-rows-[32px_minmax(0,1fr)] border-t border-line bg-panel">
+      <button
+        aria-label="Resize bottom panel"
+        className="absolute left-0 top-0 z-20 h-1 w-full cursor-row-resize bg-transparent hover:bg-accent/70"
+        onMouseDown={onResizeStart}
+        title="Resize bottom panel"
+        type="button"
+      />
       <div className="flex items-center justify-between border-b border-line bg-tabs px-2">
         <div className="flex h-full">
           {tabs.map(({ id, label, icon: Icon }) => (
             <button
-              className={`flex h-full items-center gap-1.5 border-r border-line px-3 text-xs font-semibold uppercase tracking-wide ${
+              className={`flex h-full items-center gap-1.5 border-r border-line px-3 text-xs ${
                 activeTab === id
                   ? "bg-panel text-text-main"
                   : "text-muted hover:bg-white/[0.035] hover:text-text-main"
               }`}
               key={id}
               onClick={() => onTabChange(id)}
+              aria-label={`Show ${label} panel`}
             >
               <Icon size={14} />
               {label}
@@ -36,11 +53,31 @@ export function BottomPanel({ activeTab, error, events, executionResult, hasResu
             <span className="truncate">{error}</span>
           </div>
         )}
+        <button
+          aria-label="Hide bottom panel"
+          className="grid h-7 w-7 place-items-center text-dim hover:bg-white/[0.055] hover:text-text-main"
+          onClick={onClose}
+          title="Hide bottom panel"
+        >
+          <X size={14} />
+        </button>
       </div>
-      <div className="min-h-0 overflow-auto p-3">
-        {activeTab === "result" && <ResultTab executionResult={executionResult} hasResult={hasResult} />}
-        {activeTab === "logs" && <LogsTab events={events} />}
-        {activeTab === "policy" && <PolicyTab />}
+      <div className="min-h-0 overflow-hidden">
+        {activeTab === "result" && (
+          <div className="h-full overflow-auto p-3">
+            <ResultTab executionResult={executionResult} hasResult={hasResult} />
+          </div>
+        )}
+        {activeTab === "logs" && (
+          <div className="h-full overflow-auto p-3">
+            <LogsTab events={events} />
+          </div>
+        )}
+        {activeTab === "policy" && (
+          <div className="h-full overflow-auto p-3">
+            <PolicyTab />
+          </div>
+        )}
       </div>
     </section>
   );

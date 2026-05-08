@@ -196,7 +196,7 @@ npm audit --audit-level=moderate
 Implemented:
 
 - FastAPI backend structure with clear API/service/db boundaries.
-- VSCode-style React workbench UI with Activity Bar, Explorer-style dataset sidebar, Monaco Editor tabs, bottom panel, inspector, and status bar.
+- VSCode-style React workbench UI following the main workbench containers: Title Bar, Activity Bar, Primary Sidebar, Editor, bottom Panel, Secondary Sidebar chat, and Status Bar.
 - Mock AI provider behind an `LLMProvider` boundary.
 - Prompt builder and structured proposal schema.
 - Human approval workflow with code hash validation.
