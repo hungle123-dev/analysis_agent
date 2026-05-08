@@ -1,13 +1,16 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Editor from "@monaco-editor/react";
-import { Code2 } from "lucide-react";
 import { api } from "./api/client";
 
+import { ActivityBar } from "./components/workbench/ActivityBar";
 import { GlobalCommandBar } from "./components/workbench/GlobalCommandBar";
 import { DatasetSidebar } from "./components/workbench/DatasetSidebar";
 import { ProposalHeader } from "./components/workbench/ProposalHeader";
 import { ApprovalGate } from "./components/workbench/ApprovalGate";
 import { Inspector } from "./components/workbench/Inspector/Inspector";
+import { EditorTabs } from "./components/workbench/EditorTabs";
+import { BottomPanel } from "./components/workbench/BottomPanel";
+import { StatusBar } from "./components/workbench/StatusBar";
 
 const EMPTY_CODE = `# Code proposal will appear here after AI generates it.
 # AI-generated code must be reviewed, edited if needed, and approved before local execution.`;
@@ -182,7 +185,7 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen min-h-[700px] flex-col overflow-hidden bg-ink text-text-main">
+    <div className="grid h-screen min-h-[720px] grid-rows-[48px_minmax(0,1fr)_24px] overflow-hidden bg-ink text-text-main">
       <GlobalCommandBar 
         activeDatasetId={activeDatasetId} 
         datasets={datasets}
@@ -193,21 +196,16 @@ export default function App() {
         status={status}
       />
 
-      <main className="grid min-h-0 min-w-0 flex-1 grid-cols-[260px_minmax(560px,1fr)_380px] max-[1100px]:grid-cols-[240px_minmax(0,1fr)] max-[760px]:block max-[760px]:h-auto">
+      <main className="grid min-h-0 min-w-0 grid-cols-[48px_272px_minmax(520px,1fr)_360px] max-[1180px]:grid-cols-[48px_248px_minmax(0,1fr)] max-[760px]:block max-[760px]:h-auto">
+        <ActivityBar onSelectInspector={setInspectorTab} />
         <DatasetSidebar dataset={activeDataset} />
 
-        <section className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden border-r border-white/10 bg-[#111214] max-[760px]:min-h-screen">
+        <section className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)_230px_auto] overflow-hidden border-r border-line bg-editor max-[760px]:min-h-screen">
           <ProposalHeader proposal={proposal} />
           {error && <div className="border-y border-rose-soft/30 bg-rose-soft/10 px-4 py-2 text-sm text-[#ffd4da]">{error}</div>}
 
-          <div className="min-h-0 min-w-0 flex flex-col overflow-hidden bg-panel">
-            <div className="flex h-9 shrink-0 items-center justify-between bg-[#121316] px-3 text-xs text-muted">
-              <span className="inline-flex h-full items-center gap-2 border-b-2 border-violet px-1 text-text-main">
-                <Code2 size={14} />
-                proposal.py
-              </span>
-              <span>{code.split("\n").length} lines</span>
-            </div>
+          <div className="min-h-0 min-w-0 flex flex-col overflow-hidden bg-editor">
+            <EditorTabs lineCount={code.split("\n").length} proposalId={proposal?.proposal_id} />
             <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
               <Editor
                 height="100%"
@@ -229,6 +227,15 @@ export default function App() {
             </div>
           </div>
 
+          <BottomPanel
+            activeTab={inspectorTab}
+            error={error}
+            events={events}
+            executionResult={executionResult}
+            hasResult={hasResult}
+            onTabChange={setInspectorTab}
+          />
+
           <ApprovalGate
             canRun={canRun}
             onApprove={approveProposal}
@@ -247,6 +254,7 @@ export default function App() {
           onTabChange={setInspectorTab}
         />
       </main>
+      <StatusBar dataset={activeDataset} proposal={proposal} status={status} />
     </div>
   );
 }

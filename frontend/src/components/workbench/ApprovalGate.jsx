@@ -6,7 +6,7 @@ export function ApprovalGate({ canRun, onApprove, onReject, onReset, onRun, stat
   const isRunning = status === "running";
   
   return (
-    <div className="flex shrink-0 items-center justify-between gap-3 bg-black/20 px-4 py-3 max-[760px]:flex-col max-[760px]:items-stretch">
+    <div className="flex shrink-0 items-center justify-between gap-3 border-t border-line bg-panel px-4 py-2 max-[760px]:flex-col max-[760px]:items-stretch">
       <div>
         <p className="text-[11px] font-extrabold uppercase text-muted">Human approval gate</p>
         <p className="text-sm text-muted">

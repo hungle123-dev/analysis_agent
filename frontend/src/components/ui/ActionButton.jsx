@@ -6,7 +6,7 @@ export function ActionButton({ children, className = "", disabled, icon: Icon, i
     ghost: "border-line bg-panel-2 text-text-main hover:bg-panel-3",
     danger: "border-rose-soft/40 bg-rose-soft/10 text-[#ffd4da] hover:bg-rose-soft/20",
     approve: "approve-action border-mint bg-mint text-ink hover:bg-mint-deep",
-    run: "border-amber-soft bg-amber-soft text-ink disabled:border-white/10 disabled:bg-white/[0.04] disabled:text-dim hover:bg-[#d4a046]"
+    run: "border-accent bg-accent text-white hover:bg-[#0069ad] disabled:border-white/10 disabled:bg-white/[0.04] disabled:text-dim"
   }[tone];
 
   return (

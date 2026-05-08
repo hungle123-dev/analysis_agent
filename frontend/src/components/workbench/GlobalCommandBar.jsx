@@ -4,13 +4,13 @@ import { StatusBadge } from "../ui/StatusBadge";
 
 export function GlobalCommandBar({ activeDatasetId, datasets, onDatasetChange, prompt, onPromptChange, onGenerate, status }) {
   return (
-    <header className="flex h-14 shrink-0 items-center gap-4 border-b border-white/10 bg-panel px-4">
+    <header className="flex h-12 shrink-0 items-center gap-3 border-b border-line bg-panel px-3">
       <div className="flex items-center gap-2 shrink-0">
         <Database size={16} className="text-data-blue" />
         <select
           value={activeDatasetId}
           onChange={(e) => onDatasetChange(e.target.value)}
-          className="bg-transparent text-sm font-semibold outline-none cursor-pointer"
+          className="cursor-pointer bg-transparent text-sm font-semibold outline-none"
         >
           {datasets.map((d) => (
             <option key={d.id} value={d.id} className="bg-panel">
@@ -20,9 +20,9 @@ export function GlobalCommandBar({ activeDatasetId, datasets, onDatasetChange, p
         </select>
       </div>
 
-      <div className="h-6 w-px bg-white/10 shrink-0" />
+      <div className="h-6 w-px shrink-0 bg-line" />
 
-      <div className="flex flex-1 items-center gap-2 rounded-lg border border-white/10 bg-ink px-3 py-1.5 focus-within:border-violet/50 transition-colors">
+      <div className="flex flex-1 items-center gap-2 border border-line bg-editor px-3 py-1.5 transition-colors focus-within:border-accent">
         <Sparkles className="text-violet" size={16} />
         <input
           className="min-w-0 flex-1 bg-transparent text-sm outline-none"
@@ -31,13 +31,13 @@ export function GlobalCommandBar({ activeDatasetId, datasets, onDatasetChange, p
           placeholder="What do you want to analyze?"
           aria-label="Analysis request"
         />
-        <button className="flex items-center gap-1.5 rounded-md bg-mint px-2.5 py-1 text-xs font-semibold text-ink transition-opacity hover:opacity-90" onClick={onGenerate}>
+        <button className="flex items-center gap-1.5 bg-accent px-2.5 py-1 text-xs font-semibold text-white transition-opacity hover:opacity-90" onClick={onGenerate}>
           <Send size={12} />
           Generate
         </button>
       </div>
       
-      <div className="shrink-0 ml-auto">
+      <div className="ml-auto shrink-0">
          <StatusBadge status={status} />
       </div>
     </header>

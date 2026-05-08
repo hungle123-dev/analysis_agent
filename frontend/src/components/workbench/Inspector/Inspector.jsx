@@ -12,12 +12,12 @@ const tabs = [
 
 export function Inspector({ activeTab, events, executionResult, hasResult, onTabChange }) {
   return (
-    <aside className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-shell p-4 max-[1100px]:hidden">
-      <div className="mb-3 flex rounded-lg border border-white/10 bg-black/20 p-1">
+    <aside className="grid min-h-0 grid-rows-[34px_minmax(0,1fr)] border-l border-line bg-shell max-[1180px]:hidden">
+      <div className="flex border-b border-line bg-tabs">
         {tabs.map(({ id, label, icon: Icon }) => (
           <button
-            className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-2 text-sm transition-colors ${
-              activeTab === id ? "bg-white/[0.08] text-text-main" : "text-muted hover:text-text-main hover:bg-white/[0.04]"
+            className={`flex flex-1 items-center justify-center gap-1.5 border-r border-line px-2 text-xs font-semibold uppercase transition-colors ${
+              activeTab === id ? "bg-panel text-text-main" : "text-muted hover:bg-white/[0.04] hover:text-text-main"
             }`}
             key={id}
             onClick={() => onTabChange(id)}
@@ -28,7 +28,7 @@ export function Inspector({ activeTab, events, executionResult, hasResult, onTab
         ))}
       </div>
 
-      <div className="min-h-0 overflow-auto rounded-lg border border-white/10 bg-panel p-3">
+      <div className="min-h-0 overflow-auto bg-panel p-3">
         {activeTab === "result" && <ResultTab executionResult={executionResult} hasResult={hasResult} />}
         {activeTab === "logs" && <LogsTab events={events} />}
         {activeTab === "policy" && <PolicyTab />}

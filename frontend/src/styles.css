@@ -1,21 +1,26 @@
 @import "tailwindcss";
 
 @theme {
-  --color-ink: #0f0f10;
-  --color-shell: #131315;
-  --color-panel: #171719;
-  --color-panel-2: #202024;
-  --color-panel-3: #29292f;
-  --color-line: #34343a;
-  --color-text-main: #f4f1ea;
-  --color-muted: #aaa6a0;
-  --color-dim: #756f68;
-  --color-mint: #4fd1b8;
+  --color-ink: #1e1e1e;
+  --color-activity: #181818;
+  --color-shell: #252526;
+  --color-panel: #1f1f1f;
+  --color-panel-2: #2d2d30;
+  --color-panel-3: #3a3d41;
+  --color-editor: #1e1e1e;
+  --color-tabs: #2d2d2d;
+  --color-line: #3c3c3c;
+  --color-status: #007acc;
+  --color-accent: #007acc;
+  --color-text-main: #cccccc;
+  --color-muted: #9d9d9d;
+  --color-dim: #6f6f6f;
+  --color-mint: #4ec9b0;
   --color-mint-deep: #2aa893;
-  --color-violet: #8f7cf6;
-  --color-amber-soft: #e0ad4f;
+  --color-violet: #c586c0;
+  --color-amber-soft: #dcdcaa;
   --color-rose-soft: #ee6b7c;
-  --color-data-blue: #7eb6ff;
+  --color-data-blue: #9cdcfe;
   --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "Cascadia Code", Consolas, monospace;
 }
@@ -32,8 +37,8 @@
 
   body {
     overflow: hidden;
-    background: #0f0f10;
-    color: #f4f1ea;
+    background: #1e1e1e;
+    color: #cccccc;
     font-family: var(--font-sans);
   }
 
