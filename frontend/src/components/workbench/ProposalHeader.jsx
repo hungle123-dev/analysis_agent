@@ -13,9 +13,11 @@ export function ProposalHeader({ proposal }) {
             AI proposal: {proposal?.summary ?? "No proposal generated yet"}
           </p>
         </div>
-        <span className="border border-amber-soft/35 bg-amber-soft/10 px-2.5 py-1 text-xs font-bold text-amber-soft">
-          {proposal?.risk_flags?.[0] ?? "pending_review"}
-        </span>
+        {proposal?.risk_flags?.[0] && (
+          <span className="border border-amber-soft/35 bg-amber-soft/10 px-2.5 py-1 text-xs font-bold text-amber-soft">
+            {proposal.risk_flags[0]}
+          </span>
+        )}
       </div>
       <p className="max-w-full truncate text-sm text-muted" title={proposal?.explanation ?? "Generate a proposal to inspect the explanation here."}>
         {proposal?.explanation ?? "Generate a proposal to inspect the explanation here."}

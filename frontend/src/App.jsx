@@ -7,7 +7,6 @@ import { GlobalCommandBar } from "./components/workbench/GlobalCommandBar";
 import { DatasetSidebar } from "./components/workbench/DatasetSidebar";
 import { ProposalHeader } from "./components/workbench/ProposalHeader";
 import { ApprovalGate } from "./components/workbench/ApprovalGate";
-import { Inspector } from "./components/workbench/Inspector/Inspector";
 import { EditorTabs } from "./components/workbench/EditorTabs";
 import { BottomPanel } from "./components/workbench/BottomPanel";
 import { StatusBar } from "./components/workbench/StatusBar";
@@ -187,20 +186,21 @@ export default function App() {
   return (
     <div className="grid h-screen min-h-[720px] grid-rows-[48px_minmax(0,1fr)_24px] overflow-hidden bg-ink text-text-main">
       <GlobalCommandBar 
-        activeDatasetId={activeDatasetId} 
-        datasets={datasets}
-        onDatasetChange={setActiveDatasetId}
         prompt={prompt}
         onPromptChange={setPrompt}
         onGenerate={generateProposal}
-        status={status}
       />
 
-      <main className="grid min-h-0 min-w-0 grid-cols-[48px_272px_minmax(520px,1fr)_360px] max-[1180px]:grid-cols-[48px_248px_minmax(0,1fr)] max-[760px]:block max-[760px]:h-auto">
+      <main className="grid min-h-0 min-w-0 grid-cols-[48px_286px_minmax(0,1fr)] max-[980px]:grid-cols-[48px_248px_minmax(0,1fr)] max-[760px]:block max-[760px]:h-auto">
         <ActivityBar onSelectInspector={setInspectorTab} />
-        <DatasetSidebar dataset={activeDataset} />
+        <DatasetSidebar
+          activeDatasetId={activeDatasetId}
+          dataset={activeDataset}
+          datasets={datasets}
+          onDatasetChange={setActiveDatasetId}
+        />
 
-        <section className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)_230px_auto] overflow-hidden border-r border-line bg-editor max-[760px]:min-h-screen">
+        <section className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)_230px_auto] overflow-hidden bg-editor max-[760px]:min-h-screen">
           <ProposalHeader proposal={proposal} />
           {error && <div className="border-y border-rose-soft/30 bg-rose-soft/10 px-4 py-2 text-sm text-[#ffd4da]">{error}</div>}
 
@@ -245,16 +245,8 @@ export default function App() {
             status={status}
           />
         </section>
-
-        <Inspector
-          activeTab={inspectorTab}
-          events={events}
-          executionResult={executionResult}
-          hasResult={hasResult}
-          onTabChange={setInspectorTab}
-        />
       </main>
-      <StatusBar dataset={activeDataset} proposal={proposal} status={status} />
+      <StatusBar proposal={proposal} status={status} />
     </div>
   );
 }
