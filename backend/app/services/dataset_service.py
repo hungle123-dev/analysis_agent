@@ -14,6 +14,8 @@ CSV_CHUNK_SIZE = 50_000
 _REGISTRY_CACHE: dict[str, dict[str, Any]] | None = None
 _REGISTRY_CACHE_MTIME_NS: int | None = None
 _REGISTRY_CACHE_PATH: Path | None = None
+_ROW_COUNT_CACHE: dict[Path, tuple[tuple[int, int], int]] = {}
+_PROFILE_CACHE: dict[Path, tuple[tuple[int, int], dict[str, Any]]] = {}
 
 DEFAULT_DATASET_REGISTRY: list[dict[str, Any]] = [
     {
@@ -155,7 +157,7 @@ def read_dataset(dataset_id: str) -> pd.DataFrame:
         ensure_sample_data()
     if not dataset_path.exists():
         raise FileNotFoundError(f"Registered dataset file is missing: {dataset_path}")
-    return pd.read_csv(dataset_path)
+    return pd.read_csv(dataset_path, memory_map=True)
 
 
 def list_datasets() -> list[DatasetSummary]:
@@ -176,7 +178,7 @@ def list_datasets() -> list[DatasetSummary]:
                 )
             )
             continue
-        row_count = _count_csv_rows(dataset_path)
+        row_count = _cached_count_csv_rows(dataset_path)
         summaries.append(DatasetSummary(id=dataset_id, name=meta["name"], rows=row_count, status="ready"))
     return summaries
 
@@ -186,7 +188,7 @@ def get_dataset_context(dataset_id: str) -> DatasetContext:
     if dataset_id not in registry:
         raise KeyError(dataset_id)
     dataset_path = get_dataset_path(dataset_id)
-    profile = _profile_csv(dataset_path)
+    profile = _cached_profile_csv(dataset_path)
     columns = [
         ColumnInfo(
             name=name,
@@ -227,6 +229,41 @@ def _count_csv_rows(dataset_path: Path) -> int:
     for chunk in pd.read_csv(dataset_path, usecols=[first_column], chunksize=CSV_CHUNK_SIZE):
         row_count += len(chunk)
     return row_count
+
+
+def _cached_count_csv_rows(dataset_path: Path) -> int:
+    cache_key = dataset_path.resolve()
+    fingerprint = _csv_fingerprint(cache_key)
+    cached = _ROW_COUNT_CACHE.get(cache_key)
+    if cached and cached[0] == fingerprint:
+        return cached[1]
+
+    row_count = _count_csv_rows(cache_key)
+    _ROW_COUNT_CACHE[cache_key] = (fingerprint, row_count)
+    return row_count
+
+
+def _cached_profile_csv(dataset_path: Path) -> dict[str, Any]:
+    cache_key = dataset_path.resolve()
+    fingerprint = _csv_fingerprint(cache_key)
+    cached = _PROFILE_CACHE.get(cache_key)
+    if cached and cached[0] == fingerprint:
+        return cached[1]
+
+    profile = _profile_csv(cache_key)
+    _PROFILE_CACHE[cache_key] = (fingerprint, profile)
+    _ROW_COUNT_CACHE[cache_key] = (fingerprint, int(profile["rows"]))
+    return profile
+
+
+def _csv_fingerprint(dataset_path: Path) -> tuple[int, int]:
+    stat = dataset_path.stat()
+    return stat.st_mtime_ns, stat.st_size
+
+
+def clear_dataset_caches() -> None:
+    _ROW_COUNT_CACHE.clear()
+    _PROFILE_CACHE.clear()
 
 
 def _profile_csv(dataset_path: Path) -> dict[str, Any]:

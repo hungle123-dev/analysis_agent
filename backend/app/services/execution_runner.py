@@ -134,7 +134,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-df = pd.read_csv({str(get_dataset_path(dataset_id))!r})
+df = pd.read_csv({str(get_dataset_path(dataset_id))!r}, memory_map=True)
 outputs_dir = Path({str(outputs_dir)!r})
 user_code = Path({str(code_path)!r}).read_text(encoding="utf-8")
 exec(compile(user_code, {str(code_path)!r}, "exec"), {{"df": df, "pd": pd, "plt": plt, "outputs_dir": outputs_dir}})
