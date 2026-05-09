@@ -49,7 +49,12 @@ plt.tight_layout()
 plt.savefig(outputs_dir / "revenue_by_month.png")
 
 # Doan code nay in bang tong hop de frontend co the hien thi stdout.
-print(monthly.to_string(index=False))'''
+print(monthly.to_string(index=False))
+
+# === Nhan xet dua tren ket qua in (khong dua so ngoai bang monthly) ===
+# - Chuoi temporal theo cot month; moi hang la tong revenue trong thang do nhu trong bang print.
+# - Bieu do line noi lien cac diem chronology; chenh lech giua cac cot co the nhin tu bang va hinh PNG sau khi chay duoc phe duyet.
+'''
 
     return '''# Doan code nay tao ban sao dataframe de khong thay doi du lieu goc.
 work_df = df.copy()
@@ -58,4 +63,9 @@ work_df = df.copy()
 summary = work_df.describe(numeric_only=True)
 
 # Doan code nay luu bang thong ke ra stdout de frontend hien thi.
-print(summary.to_string())'''
+print(summary.to_string())
+
+# === Nhan xet dinh luong (chi lap lai thong tin trong bang summarize phia tren) ===
+# - So luong bien so (count) trong bang la so quan sat co trong work_df doi voi moi cot numeric.
+# - mean/std/min/max la thong ke mo ta tien bo theo cot; khong suy luong sai lech khi cot co nhieu NaN hay gia tri ngoai pham vi nghiep vu.
+'''

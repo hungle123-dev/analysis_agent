@@ -1,4 +1,14 @@
 import React, { Suspense, lazy, useEffect, useMemo, useState } from "react";
+
+const MIN_BOTTOM_PANEL = 110;
+
+function maxBottomPanelHeightPx() {
+  if (typeof window === "undefined") return 920;
+  const h = window.innerHeight;
+  const reservedChrome = 100;
+  const minEditorStripe = 48;
+  return Math.max(MIN_BOTTOM_PANEL + 40, Math.floor(h - reservedChrome - minEditorStripe));
+}
 import { api } from "./api/client";
 
 import { ActivityBar } from "./components/workbench/ActivityBar";
@@ -10,8 +20,9 @@ import { StatusBar } from "./components/workbench/StatusBar";
 import { TitleBar } from "./components/workbench/TitleBar";
 
 const ProposalCodeEditor = lazy(() => import("./components/workbench/ProposalCodeEditor"));
-const PROPOSAL_JOB_POLL_INTERVAL_MS = 1500;
-const PROPOSAL_JOB_MAX_POLLS = 90;
+// ds2api / local gateways often take ~60s+ per completion; leave headroom for queue + profiling.
+const PROPOSAL_JOB_POLL_INTERVAL_MS = 2000;
+const PROPOSAL_JOB_MAX_POLLS = 300;
 
 const EMPTY_CODE = `# Code proposal will appear here after AI generates it.
 # AI-generated code must be reviewed, edited if needed, and approved before local execution.`;
@@ -25,6 +36,27 @@ const EMPTY_DATASET = {
 };
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+
+function evtId(seed) {
+  return `evt_${seed}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function timelineFromSessions(sessions) {
+  return sessions.flatMap((session, i) => {
+    const rows = session.events ?? [];
+    if (i === 0) return rows;
+    const divider = [
+      {
+        id: `separator_${session.traceId}`,
+        type: "trace.separator",
+        actor: "system",
+        detail: `Phiên trace: ${session.traceId}`,
+        time: "–––"
+      }
+    ];
+    return [...divider, ...rows];
+  });
+}
 const normalizePolicyIssues = (issues) =>
   Array.isArray(issues)
     ? issues.map((issue) =>
@@ -44,7 +76,9 @@ export default function App() {
   const [prompt, setPrompt] = useState("Ve bieu do doanh thu theo thang va nhan xet xu huong.");
   const [code, setCode] = useState(EMPTY_CODE);
   const [status, setStatus] = useState("pending_review");
-  const [events, setEvents] = useState([]);
+  /** Lưu audit theo trace_id — lần prompt sau không làm mất trace cũ. */
+  const [auditSessions, setAuditSessions] = useState([]);
+  const [pendingClientEvents, setPendingClientEvents] = useState([]);
   const [inspectorTab, setInspectorTab] = useState("logs");
   const [proposal, setProposal] = useState(null);
   const [executionResult, setExecutionResult] = useState(null);
@@ -74,6 +108,18 @@ export default function App() {
   const canRun = status === "approved" && Boolean(proposal?.code_hash) && !isExecuting;
 
   useEffect(() => {
+    function onViewportResize() {
+      setBottomPanelHeight((current) =>
+        clamp(current, MIN_BOTTOM_PANEL, maxBottomPanelHeightPx())
+      );
+    }
+
+    window.addEventListener("resize", onViewportResize);
+    onViewportResize();
+    return () => window.removeEventListener("resize", onViewportResize);
+  }, []);
+
+  useEffect(() => {
     api
       .listDatasets()
       .then((items) => {
@@ -95,35 +141,43 @@ export default function App() {
       .catch((err) => setError(`Dataset context failed: ${err.message}`));
   }, [activeDatasetId]);
 
+  const timelineEvents = useMemo(
+    () => [...timelineFromSessions(auditSessions), ...pendingClientEvents],
+    [auditSessions, pendingClientEvents]
+  );
+
   function addEvent(type, actor, detail) {
-    setEvents((current) => [
+    const time = new Date().toLocaleTimeString("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit"
+    });
+    setPendingClientEvents((current) => [
       ...current,
-      {
-        id: `evt_${String(current.length + 1).padStart(3, "0")}`,
-        type,
-        actor,
-        detail,
-        time: new Date().toLocaleTimeString("en-GB", {
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit"
-        })
-      }
+      { id: evtId(`${type}_${current.length}`), type, actor, detail, time }
     ]);
   }
 
   async function refreshLogs(traceId) {
     if (!traceId) return;
     const logs = await api.getLogs(traceId);
-    setEvents(
-      logs.events.map((event) => ({
-        id: event.id,
-        type: event.type,
-        actor: event.actor,
-        time: new Date(event.time).toLocaleTimeString("en-GB"),
-        detail: event.detail
-      }))
-    );
+    const mapped = logs.events.map((event) => ({
+      id: event.id,
+      type: event.type,
+      actor: event.actor,
+      time: new Date(event.time).toLocaleTimeString("en-GB"),
+      detail: event.detail
+    }));
+    setAuditSessions((prev) => {
+      const idx = prev.findIndex((session) => session.traceId === traceId);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = { traceId, events: mapped };
+        return next;
+      }
+      return [...prev, { traceId, events: mapped }];
+    });
+    setPendingClientEvents([]);
   }
 
   async function generateProposal() {
@@ -266,7 +320,8 @@ export default function App() {
 
   function resetDemo() {
     setCode(EMPTY_CODE);
-    setEvents([]);
+    setAuditSessions([]);
+    setPendingClientEvents([]);
     setStatus("pending_review");
     setInspectorTab("logs");
     setProposal(null);
@@ -305,7 +360,10 @@ export default function App() {
         setSecondarySidebarWidth(clamp(startSecondaryWidth - (moveEvent.clientX - startX), 280, 520));
       }
       if (kind === "bottom") {
-        setBottomPanelHeight(clamp(startBottomHeight - (moveEvent.clientY - startY), 160, 380));
+        const cap = maxBottomPanelHeightPx();
+        setBottomPanelHeight(
+          clamp(startBottomHeight - (moveEvent.clientY - startY), MIN_BOTTOM_PANEL, cap)
+        );
       }
     }
 
@@ -325,7 +383,7 @@ export default function App() {
   const mainGridClass = [
     "relative grid min-h-0 min-w-0",
     isBottomPanelOpen && isSecondarySidebarOpen
-      ? "max-[980px]:grid-rows-[minmax(0,1fr)_320px]"
+      ? "max-[980px]:grid-rows-[minmax(0,1fr)_var(--bottom-panel-height)]"
       : "max-[980px]:grid-rows-[minmax(0,1fr)]",
     isPrimarySidebarOpen && isSecondarySidebarOpen
       ? "grid-cols-[48px_var(--primary-sidebar-width)_minmax(0,1fr)_var(--secondary-sidebar-width)] max-[1180px]:grid-cols-[44px_var(--primary-sidebar-width)_minmax(0,1fr)_var(--secondary-sidebar-width)]"
@@ -340,7 +398,7 @@ export default function App() {
   const editorSectionClass = [
     "grid min-h-0 min-w-0 overflow-hidden bg-editor max-[980px]:col-start-2 max-[980px]:row-start-1 max-[760px]:min-h-screen",
     isBottomPanelOpen
-      ? "grid-rows-[minmax(0,1fr)_var(--bottom-panel-height)] max-[980px]:grid-rows-[minmax(0,1fr)_190px]"
+      ? "grid-rows-[minmax(0,1fr)_var(--bottom-panel-height)] max-[980px]:grid-rows-[minmax(0,1fr)_var(--bottom-panel-height)]"
       : "grid-rows-[minmax(0,1fr)]"
   ].join(" ");
 
@@ -388,7 +446,7 @@ export default function App() {
             <BottomPanel
               activeTab={inspectorTab}
               error={error}
-              events={events}
+              events={timelineEvents}
               executionResult={executionResult}
               hasResult={hasResult}
               policyIssues={policyIssues}

@@ -25,9 +25,10 @@ class DeepSeekLLMProvider:
         self.model = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash-nothinking").strip()
         base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com").strip().rstrip("/")
         try:
-            timeout = max(5.0, float(os.getenv("DEEPSEEK_TIMEOUT_SECONDS", "30")))
+            # Default generous for OpenAI-compatible local proxies (e.g. ds2api) often ~60s latency.
+            timeout = max(5.0, float(os.getenv("DEEPSEEK_TIMEOUT_SECONDS", "120")))
         except ValueError:
-            timeout = 30.0
+            timeout = 120.0
         self.base_url = _normalize_openai_base_url(base_url)
         self.max_tokens = _parse_optional_int_env("DEEPSEEK_MAX_TOKENS", default=2200, minimum=512)
         self.temperature = _parse_float_env("DEEPSEEK_TEMPERATURE", default=0.2, minimum=0.0, maximum=2.0)
