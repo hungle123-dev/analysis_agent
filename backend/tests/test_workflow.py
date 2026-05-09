@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+import time
 import uuid
 from pathlib import Path
 
@@ -69,6 +70,35 @@ def test_execution_requires_approval(client: TestClient):
     assert response.json()["detail"] == "Proposal must be approved before execution"
 
 
+def test_proposal_job_creates_proposal_in_background(client: TestClient):
+    response = client.post(
+        "/api/ai/proposals/jobs",
+        json={
+            "session_id": "test_session",
+            "dataset_id": "sales_2025",
+            "user_request": "Ve doanh thu theo thang",
+        },
+    )
+    assert response.status_code == 200
+    job = response.json()
+    assert job["status"] in {"queued", "running", "succeeded"}
+
+    final_job = job
+    for _ in range(20):
+        poll = client.get(f"/api/ai/proposals/jobs/{job['job_id']}")
+        assert poll.status_code == 200
+        final_job = poll.json()
+        if final_job["status"] == "succeeded":
+            break
+        time.sleep(0.05)
+
+    assert final_job["status"] == "succeeded"
+    assert final_job["proposal_id"]
+    proposal = client.get(f"/api/ai/proposals/{final_job['proposal_id']}")
+    assert proposal.status_code == 200
+    assert proposal.json()["status"] == "pending_review"
+
+
 def test_execution_rejects_code_hash_mismatch(client: TestClient):
     proposal = create_proposal(client)
     approve_proposal(client, proposal["proposal_id"])
@@ -85,6 +115,32 @@ def test_execution_rejects_code_hash_mismatch(client: TestClient):
 
     assert response.status_code == 409
     assert response.json()["detail"] == "Code hash mismatch"
+
+
+def test_rejected_proposal_is_logged_and_cannot_execute(client: TestClient):
+    proposal = create_proposal(client)
+
+    rejected = client.post(
+        f"/api/ai/proposals/{proposal['proposal_id']}/reject",
+        json={"rejected_by": "tester", "rejection_reason": "needs different chart"},
+    )
+    assert rejected.status_code == 200
+    assert rejected.json()["status"] == "rejected"
+
+    logs = client.get(f"/api/logs/{proposal['trace_id']}")
+    assert logs.status_code == 200
+    assert any(event["type"] == "ai.approval.rejected" for event in logs.json()["events"])
+
+    response = client.post(
+        "/api/executions",
+        json={
+            "proposal_id": proposal["proposal_id"],
+            "dataset_id": "sales_2025",
+            "code_hash": "sha256:not-approved",
+            "requested_by": "tester",
+        },
+    )
+    assert response.status_code == 409
 
 
 def test_policy_rejects_unsafe_edited_code(client: TestClient):
@@ -128,6 +184,33 @@ def test_approved_proposal_executes_locally_and_returns_artifact(client: TestCli
     assert isinstance(body["return_code"], int)
     assert "started_at" in body
     assert "finished_at" in body
+
+
+def test_completed_proposal_cannot_run_twice(client: TestClient):
+    proposal = create_proposal(client)
+    approval = approve_proposal(client, proposal["proposal_id"])
+
+    first = client.post(
+        "/api/executions",
+        json={
+            "proposal_id": proposal["proposal_id"],
+            "dataset_id": "sales_2025",
+            "code_hash": approval["code_hash"],
+            "requested_by": "tester",
+        },
+    )
+    assert first.status_code == 200
+
+    second = client.post(
+        "/api/executions",
+        json={
+            "proposal_id": proposal["proposal_id"],
+            "dataset_id": "sales_2025",
+            "code_hash": approval["code_hash"],
+            "requested_by": "tester",
+        },
+    )
+    assert second.status_code == 409
 
 
 def test_execution_returns_table_artifacts(client: TestClient):

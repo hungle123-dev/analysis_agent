@@ -1,5 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
-import Editor from "@monaco-editor/react";
+import React, { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { api } from "./api/client";
 
 import { ActivityBar } from "./components/workbench/ActivityBar";
@@ -9,6 +8,10 @@ import { BottomPanel } from "./components/workbench/BottomPanel";
 import { SecondaryAiSidebar } from "./components/workbench/SecondaryAiSidebar";
 import { StatusBar } from "./components/workbench/StatusBar";
 import { TitleBar } from "./components/workbench/TitleBar";
+
+const ProposalCodeEditor = lazy(() => import("./components/workbench/ProposalCodeEditor"));
+const PROPOSAL_JOB_POLL_INTERVAL_MS = 1500;
+const PROPOSAL_JOB_MAX_POLLS = 90;
 
 const EMPTY_CODE = `# Code proposal will appear here after AI generates it.
 # AI-generated code must be reviewed, edited if needed, and approved before local execution.`;
@@ -47,6 +50,11 @@ export default function App() {
   const [executionResult, setExecutionResult] = useState(null);
   const [error, setError] = useState("");
   const [policyIssues, setPolicyIssues] = useState([]);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [proposalJob, setProposalJob] = useState(null);
+  const [isApproving, setIsApproving] = useState(false);
+  const [isRejecting, setIsRejecting] = useState(false);
+  const [isExecuting, setIsExecuting] = useState(false);
   const [isPrimarySidebarOpen, setIsPrimarySidebarOpen] = useState(() =>
     typeof window === "undefined" ? true : window.innerWidth > 980
   );
@@ -62,7 +70,8 @@ export default function App() {
   );
 
   const hasResult = status === "succeeded";
-  const canRun = status === "approved" && Boolean(proposal?.code_hash);
+  const isBusy = isGenerating || isApproving || isRejecting || isExecuting;
+  const canRun = status === "approved" && Boolean(proposal?.code_hash) && !isExecuting;
 
   useEffect(() => {
     api
@@ -125,13 +134,26 @@ export default function App() {
     setError("");
     setPolicyIssues([]);
     setExecutionResult(null);
+    setIsGenerating(true);
+    setProposalJob(null);
+    setStatus("generating");
+    addEvent("ai.proposal.job_started", "student_01", "Starting background proposal generation");
     try {
-      const nextProposal = await api.createProposal({
+      const job = await api.createProposalJob({
         session_id: "demo_01",
         dataset_id: activeDatasetId,
         user_request: prompt,
         mode: "generate_code"
       });
+      setProposalJob(job);
+      addEvent("ai.proposal.job_queued", "system", `Job ${job.job_id} queued`);
+
+      const finalJob = await waitForProposalJob(job.job_id);
+      if (finalJob.status !== "succeeded" || !finalJob.proposal_id) {
+        throw new Error(finalJob.error || "Proposal generation failed");
+      }
+
+      const nextProposal = await api.getProposal(finalJob.proposal_id);
       setProposal(nextProposal);
       setCode(nextProposal.code);
       setStatus(nextProposal.status);
@@ -140,18 +162,37 @@ export default function App() {
     } catch (err) {
       setPolicyIssues(normalizePolicyIssues(err?.detail?.policy_errors));
       setError(err.message);
+      setStatus("failed");
+    } finally {
+      setIsGenerating(false);
     }
+  }
+
+  async function waitForProposalJob(jobId) {
+    let latest = null;
+    for (let attempt = 0; attempt < PROPOSAL_JOB_MAX_POLLS; attempt += 1) {
+      latest = await api.getProposalJob(jobId);
+      setProposalJob(latest);
+
+      if (latest.status === "succeeded" || latest.status === "failed") {
+        return latest;
+      }
+
+      await new Promise((resolve) => window.setTimeout(resolve, PROPOSAL_JOB_POLL_INTERVAL_MS));
+    }
+    throw new Error(`Proposal job ${jobId} timed out in frontend polling`);
   }
 
   function updateCode(value) {
     setCode(value ?? "");
-    if (proposal && ["pending_review", "approved", "succeeded"].includes(status)) setStatus("edited");
+    if (proposal && ["pending_review", "approved", "rejected", "failed", "succeeded"].includes(status)) setStatus("edited");
   }
 
   async function approveProposal() {
     if (!proposal) return;
     setError("");
     setPolicyIssues([]);
+    setIsApproving(true);
     try {
       const updated = await api.updateProposal(proposal.proposal_id, {
         edited_by: "student_01",
@@ -169,24 +210,43 @@ export default function App() {
       setPolicyIssues(normalizePolicyIssues(err?.detail?.policy_errors));
       setError(err.message);
       setInspectorTab("policy");
+    } finally {
+      setIsApproving(false);
     }
   }
 
-  function rejectProposal() {
-    setStatus("rejected");
-    setInspectorTab("logs");
-    addEvent("ai.approval.rejected", "student_01", "Rejected proposal before execution");
+  async function rejectProposal() {
+    if (!proposal) return;
+    setError("");
+    setIsRejecting(true);
+    try {
+      const rejected = await api.rejectProposal(proposal.proposal_id, {
+        rejected_by: "student_01",
+        rejection_reason: "Rejected from frontend review gate"
+      });
+      setProposal(rejected);
+      setStatus(rejected.status);
+      setInspectorTab("logs");
+      await refreshLogs(rejected.trace_id);
+    } catch (err) {
+      setError(err.message);
+      setInspectorTab("logs");
+      addEvent("ai.approval.reject_failed", "system", err.message);
+    } finally {
+      setIsRejecting(false);
+    }
   }
 
   async function runLocal() {
     if (!canRun || !proposal?.code_hash) return;
+    setIsExecuting(true);
     setStatus("running");
     setInspectorTab("logs");
     setPolicyIssues([]);
     try {
       const result = await api.runExecution({
         proposal_id: proposal.proposal_id,
-        dataset_id: activeDatasetId,
+        dataset_id: proposal.dataset_id,
         code_hash: proposal.code_hash,
         requested_by: "student_01"
       });
@@ -195,10 +255,12 @@ export default function App() {
       setInspectorTab("result");
       await refreshLogs(proposal.trace_id);
     } catch (err) {
-      setStatus("failed");
+      setStatus((current) => (current === "running" ? "failed" : current));
       setInspectorTab("policy");
       setPolicyIssues(normalizePolicyIssues(err?.detail?.policy_errors));
       setError(err.message);
+    } finally {
+      setIsExecuting(false);
     }
   }
 
@@ -211,6 +273,11 @@ export default function App() {
     setExecutionResult(null);
     setPolicyIssues([]);
     setError("");
+    setProposalJob(null);
+    setIsGenerating(false);
+    setIsApproving(false);
+    setIsRejecting(false);
+    setIsExecuting(false);
   }
 
   function selectActivityItem(id) {
@@ -230,7 +297,7 @@ export default function App() {
     const startSecondaryWidth = secondarySidebarWidth;
     const startBottomHeight = bottomPanelHeight;
 
-    function onMouseMove(moveEvent) {
+    function onPointerMove(moveEvent) {
       if (kind === "primary") {
         setPrimarySidebarWidth(clamp(startPrimaryWidth + moveEvent.clientX - startX, 220, 420));
       }
@@ -242,15 +309,17 @@ export default function App() {
       }
     }
 
-    function onMouseUp() {
+    function onPointerUp() {
       document.body.classList.remove("select-none", "cursor-col-resize", "cursor-row-resize");
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
     }
 
     document.body.classList.add("select-none", kind === "bottom" ? "cursor-row-resize" : "cursor-col-resize");
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerUp);
   }
 
   const mainGridClass = [
@@ -309,23 +378,9 @@ export default function App() {
           <div className="min-h-0 min-w-0 flex flex-col overflow-hidden bg-editor">
             <EditorTabs lineCount={code.split("\n").length} proposalId={proposal?.proposal_id} />
             <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
-              <Editor
-                height="100%"
-                language="python"
-                theme="vs-dark"
-                value={code}
-                onChange={updateCode}
-                loading={<div className="grid h-full place-items-center bg-[#111112] text-muted">Preparing editor...</div>}
-                options={{
-                  minimap: { enabled: false },
-                  fontSize: 14,
-                  fontFamily: "Cascadia Code, Consolas, monospace",
-                  lineNumbersMinChars: 3,
-                  scrollBeyondLastLine: false,
-                  wordWrap: "on",
-                  padding: { top: 12, bottom: 12 }
-                }}
-              />
+              <Suspense fallback={<div className="grid h-full place-items-center bg-[#111112] text-muted">Preparing editor...</div>}>
+                <ProposalCodeEditor code={code} onChange={updateCode} readOnly={status === "running"} />
+              </Suspense>
             </div>
           </div>
 
@@ -347,6 +402,10 @@ export default function App() {
           <SecondaryAiSidebar
             canRun={canRun}
             error={error}
+            isApproving={isApproving}
+            isBusy={isBusy}
+            isGenerating={isGenerating}
+            isRejecting={isRejecting}
             onApprove={approveProposal}
             onGenerate={generateProposal}
             onHide={() => setIsSecondarySidebarOpen(false)}
@@ -357,6 +416,7 @@ export default function App() {
             onRun={runLocal}
             prompt={prompt}
             proposal={proposal}
+            proposalJob={proposalJob}
             status={status}
           />
         )}

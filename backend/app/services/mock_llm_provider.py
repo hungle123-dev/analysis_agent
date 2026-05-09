@@ -22,6 +22,7 @@ class MockLLMProvider:
             ],
             risk_flags=["creates_chart_file", "creates_table_stdout"],
             expected_outputs=["table", "chart", "log"],
+            metadata={"provider": self.name, "model": "mock", "llm_duration_ms": 0},
         )
 
 

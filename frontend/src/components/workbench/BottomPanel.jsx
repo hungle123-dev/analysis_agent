@@ -25,8 +25,8 @@ export function BottomPanel({
     <section className="relative grid min-h-0 grid-rows-[32px_minmax(0,1fr)] border-t border-line bg-panel">
       <button
         aria-label="Resize bottom panel"
-        className="absolute left-0 top-0 z-20 h-1 w-full cursor-row-resize bg-transparent hover:bg-accent/70"
-        onMouseDown={onResizeStart}
+        className="absolute left-0 top-0 z-20 h-1 w-full touch-none cursor-row-resize bg-transparent hover:bg-accent/70"
+        onPointerDown={onResizeStart}
         title="Resize bottom panel"
         type="button"
       />

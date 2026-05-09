@@ -73,6 +73,35 @@ Response:
 }
 ```
 
+### `POST /api/ai/proposals/jobs`
+
+Tao background job de AI sinh proposal ma khong khoa request frontend trong luc doi model.
+
+Request giong `POST /api/ai/proposals`.
+
+Response:
+
+```json
+{
+  "job_id": "job_001",
+  "status": "queued",
+  "dataset_id": "sales",
+  "trace_id": null,
+  "proposal_id": null,
+  "error": null,
+  "created_at": "2026-05-09T02:00:00+00:00",
+  "updated_at": "2026-05-09T02:00:00+00:00"
+}
+```
+
+### `GET /api/ai/proposals/jobs/{job_id}`
+
+Frontend poll endpoint nay moi 1-2 giay. Khi `status = "succeeded"`, response co `proposal_id`.
+
+### `GET /api/ai/proposals/{proposal_id}`
+
+Lay proposal sau khi background job hoan tat.
+
 ## Edit/Approval API
 
 ### `PATCH /api/ai/proposals/{proposal_id}`
@@ -106,6 +135,19 @@ Response:
   "code_hash": "sha256:abc..."
 }
 ```
+
+### `POST /api/ai/proposals/{proposal_id}/reject`
+
+Tu choi proposal truoc khi chay local. Backend phai luu audit event de chung minh con nguoi da quyet dinh khong thuc thi code nay.
+
+```json
+{
+  "rejected_by": "student_01",
+  "rejection_reason": "Can doi cach ve bieu do"
+}
+```
+
+Response tra lai proposal voi `status = "rejected"` va `code_hash = null`.
 
 ## Execution API
 
@@ -154,6 +196,7 @@ Response:
 Backend phai reject neu:
 
 - proposal chua approved
+- proposal dang running, da succeeded, failed, hoac rejected
 - code_hash khong khop
 - code vi pham policy
 - dataset_id khong duoc dang ky
@@ -198,6 +241,7 @@ Tra toan bo chuoi:
     "ai.proposal.generated",
     "ai.proposal.edited",
     "ai.approval.approved",
+    "ai.approval.rejected",
     "execution.started",
     "execution.succeeded"
   ]

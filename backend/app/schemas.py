@@ -44,6 +44,17 @@ class ProposalResponse(BaseModel):
     code_hash: str | None = None
 
 
+class ProposalJobResponse(BaseModel):
+    job_id: str
+    status: Literal["queued", "running", "succeeded", "failed"]
+    created_at: str
+    updated_at: str
+    dataset_id: str
+    trace_id: str | None = None
+    proposal_id: str | None = None
+    error: str | None = None
+
+
 class UpdateProposalRequest(BaseModel):
     edited_by: str = "student_01"
     edited_code: str
@@ -52,6 +63,11 @@ class UpdateProposalRequest(BaseModel):
 class ApproveProposalRequest(BaseModel):
     approved_by: str = "student_01"
     approval_note: str = ""
+
+
+class RejectProposalRequest(BaseModel):
+    rejected_by: str = "student_01"
+    rejection_reason: str = ""
 
 
 class ApprovalResponse(BaseModel):

@@ -5,6 +5,10 @@ import { Chip } from "../ui/Chip";
 export function SecondaryAiSidebar({
   canRun,
   error,
+  isApproving = false,
+  isBusy = false,
+  isGenerating = false,
+  isRejecting = false,
   onApprove,
   onGenerate,
   onHide,
@@ -15,20 +19,21 @@ export function SecondaryAiSidebar({
   onRun,
   prompt,
   proposal,
+  proposalJob,
   status
 }) {
   const isRunning = status === "running";
   const hasProposal = Boolean(proposal);
   const outputs = proposal?.expected_outputs ?? [];
-  const approveDisabled = !hasProposal || isRunning || status === "approved" || status === "succeeded";
-  const rejectDisabled = !hasProposal || isRunning || status === "succeeded";
+  const approveDisabled = !hasProposal || isBusy || status === "approved" || status === "succeeded";
+  const rejectDisabled = !hasProposal || isBusy || status === "succeeded";
 
   return (
     <aside className="relative grid min-h-0 grid-rows-[35px_minmax(0,1fr)_auto] border-l border-line bg-shell max-[980px]:col-start-2 max-[980px]:row-start-2 max-[980px]:border-l-0 max-[980px]:border-t max-[760px]:min-h-[360px]">
       <button
         aria-label="Resize chat sidebar"
-        className="absolute left-0 top-0 z-20 h-full w-1 cursor-col-resize bg-transparent hover:bg-accent/70 max-[980px]:hidden"
-        onMouseDown={onResizeStart}
+        className="absolute left-0 top-0 z-20 h-full w-1 touch-none cursor-col-resize bg-transparent hover:bg-accent/70 max-[980px]:hidden"
+        onPointerDown={onResizeStart}
         title="Resize chat sidebar"
         type="button"
       />
@@ -85,6 +90,12 @@ export function SecondaryAiSidebar({
               <code className="text-data-blue">{proposal?.code_hash ? proposal.code_hash.slice(0, 12) : "unapproved"}</code>
             </div>
             <p>{gateMessage(status)}</p>
+            {proposalJob && (
+              <div className="mt-2 flex items-center justify-between border-t border-line pt-2">
+                <span>AI job</span>
+                <code className="text-data-blue">{proposalJob.status}</code>
+              </div>
+            )}
           </div>
 
           {error && <div className="border border-rose-soft/35 bg-rose-soft/10 px-2 py-1.5 text-xs text-rose-soft">{error}</div>}
@@ -101,19 +112,19 @@ export function SecondaryAiSidebar({
           <button
             aria-label="Generate proposal"
             className="inline-flex h-16 w-10 items-center justify-center border border-accent bg-accent text-white hover:bg-[#0069ad] disabled:cursor-not-allowed disabled:opacity-45"
-            disabled={isRunning}
+            disabled={isBusy}
             onClick={onGenerate}
             title="Generate proposal"
           >
-            <Send size={16} />
+            {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
           </button>
         </div>
 
         <div className="grid grid-cols-2 gap-1">
-          <SideAction icon={RotateCcw} label="Reset" onClick={onReset} />
-          <SideAction disabled={rejectDisabled} icon={X} label="Reject" onClick={onReject} />
-          <SideAction disabled={approveDisabled} icon={Check} label="Approve" onClick={onApprove} tone="approve" />
-          <SideAction disabled={!canRun || isRunning} icon={isRunning ? Loader2 : Play} label={isRunning ? "Running" : "Run local"} onClick={onRun} tone="run" />
+          <SideAction disabled={isBusy} icon={RotateCcw} label="Reset" onClick={onReset} />
+          <SideAction disabled={rejectDisabled} icon={isRejecting ? Loader2 : X} label={isRejecting ? "Rejecting" : "Reject"} onClick={onReject} />
+          <SideAction disabled={approveDisabled} icon={isApproving ? Loader2 : Check} label={isApproving ? "Approving" : "Approve"} onClick={onApprove} tone="approve" />
+          <SideAction disabled={!canRun || isBusy} icon={isRunning ? Loader2 : Play} label={isRunning ? "Running" : "Run local"} onClick={onRun} tone="run" />
         </div>
       </footer>
     </aside>
@@ -126,6 +137,7 @@ function gateMessage(status) {
       approved: "Approved code is ready to run locally.",
       edited: "Edited code must be approved again before execution.",
       failed: "Execution failed. Inspect Output, Logs, or Policy.",
+      generating: "AI is generating a proposal in the background.",
       pending_review: "Review the generated code before approving execution.",
       rejected: "Proposal was rejected before local execution.",
       running: "Approved code is running locally.",
@@ -146,6 +158,7 @@ function MessageBlock({ children, label, tone }) {
 }
 
 function SideAction({ disabled, icon: Icon, label, onClick, tone = "default" }) {
+  const isLoading = label === "Running" || label === "Rejecting" || label === "Approving";
   const toneClass =
     tone === "run"
       ? "border-accent bg-accent text-white hover:bg-[#0069ad]"
@@ -159,7 +172,7 @@ function SideAction({ disabled, icon: Icon, label, onClick, tone = "default" }) 
       disabled={disabled}
       onClick={onClick}
     >
-      <Icon size={13} className={label === "Running" ? "animate-spin" : ""} />
+      <Icon size={13} className={isLoading ? "animate-spin" : ""} />
       <span>{label}</span>
     </button>
   );

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+from pathlib import PurePath
 from typing import Literal, TypedDict
 
 
@@ -10,6 +11,7 @@ class PolicyIssue(TypedDict):
     severity: Literal["error", "warning"]
 
 ALLOWED_IMPORTS = {
+    "collections",
     "math",
     "statistics",
     "numpy",
@@ -17,10 +19,26 @@ ALLOWED_IMPORTS = {
     "pandas",
     "pandas as pd",
     "matplotlib",
+    "matplotlib.dates",
+    "matplotlib.dates as mdates",
     "matplotlib.pyplot",
     "matplotlib.pyplot as plt",
+    "matplotlib.ticker",
+    "matplotlib.ticker as mtick",
     "seaborn",
     "seaborn as sns",
+    "datetime",
+    "datetime.date",
+    "datetime.datetime",
+    "datetime.timedelta",
+    "datetime.timezone",
+}
+
+ALLOWED_FROM_IMPORTS = {
+    "collections": {"Counter", "defaultdict"},
+    "datetime": {"date", "datetime", "timedelta", "timezone"},
+    "matplotlib.dates": {"AutoDateLocator", "ConciseDateFormatter", "DateFormatter", "MonthLocator", "YearLocator"},
+    "matplotlib.ticker": {"FuncFormatter", "MaxNLocator", "PercentFormatter", "StrMethodFormatter"},
 }
 
 FORBIDDEN_MODULE_PREFIXES = {
@@ -54,7 +72,6 @@ FORBIDDEN_CALL_NAMES = {
     "globals",
     "input",
     "locals",
-    "open",
     "quit",
     "setattr",
     "vars",
@@ -73,17 +90,19 @@ FORBIDDEN_ATTR_CALLS = {
     "read_bytes",
     "read_text",
     "remove",
-    "rename",
-    "replace",
     "request",
     "rmdir",
     "send",
     "spawn",
     "system",
     "unlink",
-    "write",
     "write_bytes",
     "write_text",
+}
+
+PATH_DANGEROUS_ATTR_CALLS = {
+    "rename",
+    "replace",
 }
 
 DATA_READER_CALLS = {
@@ -113,6 +132,18 @@ OUTPUT_WRITER_CALLS = {
     "to_markdown",
     "to_parquet",
 }
+
+OUTPUT_WRITER_EXTENSIONS = {
+    "savefig": {".png", ".jpg", ".jpeg", ".svg", ".webp", ".pdf"},
+    "to_csv": {".csv"},
+    "to_excel": {".xlsx"},
+    "to_html": {".html"},
+    "to_json": {".json"},
+    "to_markdown": {".md"},
+    "to_parquet": {".parquet"},
+}
+
+TEXT_OUTPUT_EXTENSIONS = {".txt", ".log", ".md", ".json"}
 
 MUTATING_DF_CALLS = {
     "drop",
@@ -144,6 +175,10 @@ def validate_code(code: str) -> list[PolicyIssue]:
     except SyntaxError as exc:
         return [{"code": "syntax_error", "message": f"Syntax error: {exc}", "severity": "error"}]
 
+    df_aliases = _collect_df_aliases(tree)
+    safe_outputs = _collect_safe_outputs(tree)
+    safe_file_handles = _collect_safe_file_handles(tree, safe_outputs)
+
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
@@ -158,16 +193,19 @@ def validate_code(code: str) -> list[PolicyIssue]:
             else:
                 for alias in node.names:
                     import_name = f"{module}.{alias.name}" if module else alias.name
-                    if import_name not in ALLOWED_IMPORTS:
+                    if not _is_allowed_from_import(module, alias.name) and import_name not in ALLOWED_IMPORTS:
                         add("blocked_import", f"Import khong duoc phep: from {module} import {alias.name}")
 
         if isinstance(node, ast.Call):
-            _validate_call(node, add)
+            _validate_call(node, add, df_aliases, safe_outputs, safe_file_handles)
 
         if isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
             targets = _assignment_targets(node)
-            if any(_touches_original_df(target) for target in targets):
+            if any(_touches_original_df(target, df_aliases) for target in targets):
                 add("dataset_mutation", "Khong duoc gan truc tiep vao df goc. Hay tao work_df = df.copy() truoc khi bien doi.")
+
+        if isinstance(node, ast.Delete) and any(_touches_original_df(target, df_aliases) for target in node.targets):
+            add("dataset_mutation", "Khong duoc xoa cot/dong truc tiep tren df goc. Hay tao work_df = df.copy() truoc khi bien doi.")
 
         if isinstance(node, ast.Attribute) and node.attr.startswith("__"):
             add("unsafe_internal_access", f"Khong duoc truy cap thuoc tinh noi bo: {node.attr}")
@@ -178,9 +216,19 @@ def validate_code(code: str) -> list[PolicyIssue]:
     return errors
 
 
-def _validate_call(node: ast.Call, add) -> None:
+def _validate_call(
+    node: ast.Call,
+    add,
+    df_aliases: set[str],
+    safe_outputs: dict[str, str],
+    safe_file_handles: set[str],
+) -> None:
     func = node.func
     if isinstance(func, ast.Name):
+        if func.id == "open":
+            if not _is_safe_open_call(node, safe_outputs):
+                add("blocked_call", "Lenh open() chi duoc ghi file text vao outputs_dir / 'ten_file.txt'.")
+            return
         if func.id in FORBIDDEN_CALL_NAMES:
             add("blocked_call", f"Lenh goi khong an toan bi chan: {func.id}()")
         if func.id in {"Path"}:
@@ -191,19 +239,55 @@ def _validate_call(node: ast.Call, add) -> None:
         return
 
     attr = func.attr
+    if attr == "write":
+        if not _is_name_in(func.value, safe_file_handles):
+            add("blocked_call", "Lenh .write() chi duoc phep tren file handle mo bang open(outputs_dir / 'ten_file.txt', 'w').")
+        return
+    if attr in PATH_DANGEROUS_ATTR_CALLS and _touches_managed_output_path(func.value, safe_outputs):
+        add("blocked_call", f"Khong duoc goi .{attr}() tren outputs_dir hoac output path da quan ly.")
     if attr in FORBIDDEN_ATTR_CALLS:
         add("blocked_call", f"Lenh goi khong an toan bi chan: .{attr}()")
     if attr in DATA_READER_CALLS:
         add("unsafe_data_read", f"Khong duoc doc them du lieu bang .{attr}(). Backend da nap dataset vao df.")
-    if attr in OUTPUT_WRITER_CALLS and not _call_uses_outputs_dir(node):
-        add("unsafe_output_path", f"Lenh .{attr}() chi duoc ghi vao outputs_dir.")
-    if attr in MUTATING_DF_CALLS and _is_name(func.value, "df"):
+    if attr in OUTPUT_WRITER_CALLS and not _call_has_safe_output_target(node, safe_outputs, OUTPUT_WRITER_EXTENSIONS[attr]):
+        allowed = ", ".join(sorted(OUTPUT_WRITER_EXTENSIONS[attr]))
+        add("unsafe_output_path", f"Lenh .{attr}() chi duoc ghi bang outputs_dir / 'ten_file.ext' voi dinh dang: {allowed}.")
+    if attr in MUTATING_DF_CALLS and _touches_original_df(func.value, df_aliases):
         add("dataset_mutation", f"Khong duoc goi df.{attr}() truc tiep tren du lieu goc. Hay dung work_df = df.copy().")
-    if _is_name(func.value, "df") and any(
+    if _touches_original_df(func.value, df_aliases) and any(
         keyword.arg == "inplace" and isinstance(keyword.value, ast.Constant) and keyword.value.value is True
         for keyword in node.keywords
     ):
         add("dataset_mutation", "Khong duoc bien doi df goc voi inplace=True. Hay thao tac tren work_df.")
+
+
+def _collect_df_aliases(tree: ast.AST) -> set[str]:
+    aliases = {"df"}
+    changed = True
+    while changed:
+        changed = False
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign) and _is_name_in(node.value, aliases):
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and target.id not in aliases:
+                        aliases.add(target.id)
+                        changed = True
+            if isinstance(node, ast.AnnAssign) and node.value is not None and _is_name_in(node.value, aliases):
+                if isinstance(node.target, ast.Name) and node.target.id not in aliases:
+                    aliases.add(node.target.id)
+                    changed = True
+    return aliases
+
+
+def _collect_safe_file_handles(tree: ast.AST, safe_outputs: dict[str, str]) -> set[str]:
+    handles: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.With):
+            continue
+        for item in node.items:
+            if _is_safe_open_call(item.context_expr, safe_outputs) and isinstance(item.optional_vars, ast.Name):
+                handles.add(item.optional_vars.id)
+    return handles
 
 
 def _format_import(name: str, asname: str | None) -> str:
@@ -215,32 +299,135 @@ def _is_forbidden_module(module: str) -> bool:
     return root in FORBIDDEN_MODULE_PREFIXES
 
 
+def _is_allowed_from_import(module: str, name: str) -> bool:
+    return name in ALLOWED_FROM_IMPORTS.get(module, set())
+
+
 def _assignment_targets(node: ast.Assign | ast.AnnAssign | ast.AugAssign) -> list[ast.AST]:
     if isinstance(node, ast.Assign):
         return list(node.targets)
     return [node.target]
 
 
-def _touches_original_df(node: ast.AST) -> bool:
-    if _is_name(node, "df"):
+def _touches_original_df(node: ast.AST, df_aliases: set[str]) -> bool:
+    if _is_name_in(node, df_aliases):
         return True
     if isinstance(node, ast.Subscript):
-        return _touches_original_df(node.value)
+        return _touches_original_df(node.value, df_aliases)
     if isinstance(node, ast.Attribute):
-        return _touches_original_df(node.value)
+        return _touches_original_df(node.value, df_aliases)
     if isinstance(node, (ast.Tuple, ast.List)):
-        return any(_touches_original_df(element) for element in node.elts)
+        return any(_touches_original_df(element, df_aliases) for element in node.elts)
     return False
 
 
-def _call_uses_outputs_dir(node: ast.Call) -> bool:
-    return any(_contains_name(arg, "outputs_dir") for arg in [*node.args, *[kw.value for kw in node.keywords]])
-
-
-def _contains_name(node: ast.AST, name: str) -> bool:
-    if _is_name(node, name):
+def _touches_managed_output_path(node: ast.AST, safe_outputs: dict[str, str]) -> bool:
+    if _is_name(node, "outputs_dir"):
         return True
-    return any(_contains_name(child, name) for child in ast.iter_child_nodes(node))
+    if _is_name_in(node, set(safe_outputs)):
+        return True
+    if isinstance(node, ast.Attribute):
+        return _touches_managed_output_path(node.value, safe_outputs)
+    if isinstance(node, ast.Subscript):
+        return _touches_managed_output_path(node.value, safe_outputs)
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+        return _touches_managed_output_path(node.left, safe_outputs)
+    return False
+
+
+def _call_has_safe_output_target(node: ast.Call, safe_outputs: dict[str, str], allowed_extensions: set[str]) -> bool:
+    values = [*node.args, *[kw.value for kw in node.keywords]]
+    return any(_is_safe_output_path(value, safe_outputs, allowed_extensions) for value in values)
+
+
+def _is_safe_output_path(
+    node: ast.AST,
+    safe_outputs: dict[str, str] | None = None,
+    allowed_extensions: set[str] | None = None,
+) -> bool:
+    filename = _safe_output_filename(node, safe_outputs or {})
+    return filename is not None and _has_allowed_extension(filename, allowed_extensions)
+
+
+def _safe_output_filename(node: ast.AST, safe_outputs: dict[str, str]) -> str | None:
+    if isinstance(node, ast.Name) and node.id in safe_outputs:
+        return safe_outputs[node.id]
+    parts = _literal_parts_from_outputs_dir(node, safe_outputs)
+    if parts is None or len(parts) != 1 or not _is_safe_output_segment(parts[0]):
+        return None
+    return parts[0]
+
+
+def _literal_parts_from_outputs_dir(node: ast.AST, safe_outputs: dict[str, str]) -> list[str] | None:
+    if _is_name(node, "outputs_dir"):
+        return []
+    if isinstance(node, ast.Name) and node.id in safe_outputs:
+        return [safe_outputs[node.id]]
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+        left_parts = _literal_parts_from_outputs_dir(node.left, safe_outputs)
+        right_part = _literal_path_segment(node.right)
+        if left_parts is None or right_part is None:
+            return None
+        return [*left_parts, right_part]
+    return None
+
+
+def _literal_path_segment(node: ast.AST) -> str | None:
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    return None
+
+
+def _is_safe_output_segment(value: str) -> bool:
+    segment = value.strip()
+    return bool(segment) and segment not in {".", ".."} and "/" not in segment and "\\" not in segment
+
+
+def _has_allowed_extension(filename: str, allowed_extensions: set[str] | None) -> bool:
+    if not allowed_extensions:
+        return True
+    return PurePath(filename).suffix.lower() in allowed_extensions
+
+
+def _is_safe_open_call(node: ast.AST, safe_outputs: dict[str, str]) -> bool:
+    if not isinstance(node, ast.Call) or not _is_name(node.func, "open") or not node.args:
+        return False
+    if not _is_safe_output_path(node.args[0], safe_outputs, TEXT_OUTPUT_EXTENSIONS):
+        return False
+    if len(node.args) < 2:
+        return False
+    mode = node.args[1]
+    if not isinstance(mode, ast.Constant) or not isinstance(mode.value, str):
+        return False
+    return mode.value in {"w", "wt", "a", "at"}
+
+
+def _collect_safe_outputs(tree: ast.AST) -> dict[str, str]:
+    assignments: dict[str, list[ast.AST]] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    assignments.setdefault(target.id, []).append(node.value)
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.value is not None:
+            assignments.setdefault(node.target.id, []).append(node.value)
+
+    safe_outputs: dict[str, str] = {}
+    changed = True
+    while changed:
+        changed = False
+        for name, values in assignments.items():
+            filenames = [_safe_output_filename(value, safe_outputs) for value in values]
+            if values and all(filename is not None for filename in filenames) and len(set(filenames)) == 1:
+                filename = filenames[0]
+                if filename is not None and safe_outputs.get(name) != filename:
+                    safe_outputs[name] = filename
+                    changed = True
+    return safe_outputs
+
+
+def _is_name_in(node: ast.AST, names: set[str]) -> bool:
+    return isinstance(node, ast.Name) and node.id in names
 
 
 def _is_name(node: ast.AST, name: str) -> bool:

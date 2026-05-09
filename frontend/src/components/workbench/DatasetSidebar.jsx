@@ -83,10 +83,10 @@ function ResizeHandle({ ariaLabel, edge, onResizeStart }) {
   return (
     <button
       aria-label={ariaLabel}
-      className={`absolute top-0 z-20 h-full w-1 cursor-col-resize bg-transparent hover:bg-accent/70 ${
+      className={`absolute top-0 z-20 h-full w-1 touch-none cursor-col-resize bg-transparent hover:bg-accent/70 ${
         edge === "right" ? "right-0" : "left-0"
       }`}
-      onMouseDown={onResizeStart}
+      onPointerDown={onResizeStart}
       title={ariaLabel}
       type="button"
     />

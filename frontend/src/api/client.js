@@ -36,6 +36,13 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload)
     }),
+  createProposalJob: (payload) =>
+    request("/api/ai/proposals/jobs", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  getProposalJob: (jobId) => request(`/api/ai/proposals/jobs/${jobId}`),
+  getProposal: (proposalId) => request(`/api/ai/proposals/${proposalId}`),
   updateProposal: (proposalId, payload) =>
     request(`/api/ai/proposals/${proposalId}`, {
       method: "PATCH",
@@ -43,6 +50,11 @@ export const api = {
     }),
   approveProposal: (proposalId, payload) =>
     request(`/api/ai/proposals/${proposalId}/approve`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  rejectProposal: (proposalId, payload) =>
+    request(`/api/ai/proposals/${proposalId}/reject`, {
       method: "POST",
       body: JSON.stringify(payload)
     }),

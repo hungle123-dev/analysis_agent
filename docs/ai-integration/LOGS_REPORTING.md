@@ -50,6 +50,26 @@ request -> proposal -> edit -> approval -> execution -> result -> explanation
 - `status`
 - `created_at`
 
+### AI generation metadata trong `audit_events`
+
+Event `ai.proposal.generated` nen luu cac truong do hieu nang neu provider tra ve:
+
+- `provider`
+- `model`
+- `configured_model`
+- `finish_reason`
+- `llm_duration_ms`
+- `prompt_chars`
+- `max_tokens`
+- `temperature`
+- `usage.prompt_tokens`
+- `usage.completion_tokens`
+- `usage.total_tokens`
+- `usage.prompt_cache_hit_tokens`
+- `usage.prompt_cache_miss_tokens`
+
+Voi ds2api, cac so lieu nay giup phan biet cham do model, do queue/proxy, do thinking mode, hay do output qua dai.
+
 ### `approvals`
 
 - `approval_id`

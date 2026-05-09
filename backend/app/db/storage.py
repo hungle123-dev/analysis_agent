@@ -16,11 +16,14 @@ def now_iso() -> str:
 def connect() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA busy_timeout = 5000")
     return conn
 
 
 def init_db() -> None:
     with connect() as conn:
+        conn.execute("PRAGMA journal_mode = WAL")
         conn.executescript(
             """
             CREATE TABLE IF NOT EXISTS proposals (
@@ -72,6 +75,31 @@ def init_db() -> None:
               timestamp TEXT NOT NULL,
               payload_json TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS proposal_jobs (
+              job_id TEXT PRIMARY KEY,
+              status TEXT NOT NULL,
+              session_id TEXT NOT NULL,
+              dataset_id TEXT NOT NULL,
+              user_request TEXT NOT NULL,
+              mode TEXT NOT NULL,
+              trace_id TEXT,
+              proposal_id TEXT,
+              error TEXT,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_proposals_trace_id
+              ON proposals(trace_id);
+            CREATE INDEX IF NOT EXISTS idx_approvals_proposal_id
+              ON approvals(proposal_id);
+            CREATE INDEX IF NOT EXISTS idx_executions_proposal_id
+              ON executions(proposal_id);
+            CREATE INDEX IF NOT EXISTS idx_audit_events_trace_timestamp
+              ON audit_events(trace_id, timestamp);
+            CREATE INDEX IF NOT EXISTS idx_proposal_jobs_status_updated
+              ON proposal_jobs(status, updated_at);
             """
         )
         _ensure_execution_columns(conn)

@@ -27,6 +27,7 @@ This project was built for an AI integration requirement in a Data Visualization
 | Frontend | React, JavaScript, Vite |
 | Styling | Tailwind CSS |
 | Code editor | Monaco Editor |
+| AI provider | Mock, DeepSeek, or OpenAI-compatible API such as ds2api |
 | Analysis runtime | Local Python subprocess |
 | Data/Charts | pandas, matplotlib |
 | Tests | pytest |
@@ -127,7 +128,7 @@ Example:
 | `DatasetRegistry` / `dataset_service.py` | Dataset metadata, schema, sample values, allowed dataset IDs |
 | `LLMProvider` / `llm_provider.py` | Adapter boundary for mock, Gemini, OpenAI, or Ollama providers |
 | `prompt_builder.py` | Prompt rules and structured proposal schema |
-| `proposal_service.py` | Create, edit, approve, and hash AI proposals |
+| `proposal_service.py` | Create, edit, approve, reject, and hash AI proposals |
 | `policy_checker.py` | AST-based unsafe-code validation |
 | `execution_runner.py` | Local approved-code execution and artifact capture |
 | `storage.py` | SQLite persistence for proposals, approvals, executions, and audit events |
@@ -140,8 +141,12 @@ Example:
 | `GET` | `/api/datasets` | List registered datasets |
 | `GET` | `/api/datasets/{dataset_id}/context` | Get dataset schema/context |
 | `POST` | `/api/ai/proposals` | Create an AI analysis proposal |
+| `POST` | `/api/ai/proposals/jobs` | Start background AI proposal generation |
+| `GET` | `/api/ai/proposals/jobs/{job_id}` | Poll background generation status |
+| `GET` | `/api/ai/proposals/{proposal_id}` | Get a generated proposal |
 | `PATCH` | `/api/ai/proposals/{proposal_id}` | Save user-edited code |
 | `POST` | `/api/ai/proposals/{proposal_id}/approve` | Approve the current code and generate a hash |
+| `POST` | `/api/ai/proposals/{proposal_id}/reject` | Reject a proposal and save the decision in logs |
 | `POST` | `/api/executions` | Run approved code locally |
 | `GET` | `/api/logs/{trace_id}` | Retrieve audit events for a trace |
 
@@ -159,7 +164,7 @@ http://127.0.0.1:8000/docs
 python -m venv .venv
 ./.venv/bin/python -m pip install -r backend/requirements.txt
 cp .env.example .env
-# edit .env and set DEEPSEEK_API_KEY (or set AI_PROVIDER=mock for offline demo)
+# edit .env and set DEEPSEEK_API_KEY / ds2api key, or set AI_PROVIDER=mock for offline demo
 set -a
 source .env
 set +a
@@ -167,6 +172,19 @@ set +a
 ```
 
 The backend creates demo CSV files and runtime folders locally when needed. These generated files are ignored by Git.
+
+Recommended ds2api settings:
+
+```env
+AI_PROVIDER=deepseek
+DEEPSEEK_BASE_URL=http://127.0.0.1:5001
+DEEPSEEK_MODEL=deepseek-v4-flash-nothinking
+DEEPSEEK_MAX_TOKENS=2200
+DEEPSEEK_TIMEOUT_SECONDS=60
+DEEPSEEK_THINKING=disabled
+```
+
+Each generated proposal audit log includes `llm_duration_ms`, model, finish reason, prompt size, and token/cache usage when the provider returns it.
 
 ### 2. Frontend
 
@@ -219,6 +237,7 @@ Implemented:
 - FastAPI backend structure with clear API/service/db boundaries.
 - VSCode-style React workbench UI following the main workbench containers: Title Bar, Activity Bar, Primary Sidebar, Editor, bottom Panel, Secondary Sidebar chat, and Status Bar.
 - Mock AI provider behind an `LLMProvider` boundary.
+- DeepSeek/OpenAI-compatible provider with ds2api-friendly configuration and latency/token logging.
 - Prompt builder and structured proposal schema.
 - Human approval workflow with code hash validation.
 - Local Python execution runner.
@@ -229,7 +248,7 @@ Implemented:
 
 Next recommended work:
 
-- Add a real `LLMProvider` adapter for Gemini, OpenAI, or Ollama.
+- Add streaming or background proposal jobs if AI generation still feels slow.
 - Move dataset registration from hardcoded metadata to a config file.
 - Return structured table artifacts, not only stdout/chart images.
 - Display backend policy errors directly in the frontend Policy tab.

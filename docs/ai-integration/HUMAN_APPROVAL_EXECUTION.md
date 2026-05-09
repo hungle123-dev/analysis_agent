@@ -62,8 +62,8 @@ Whitelist de demo:
 - `numpy`
 - `matplotlib`
 - `seaborn`
-- `plotly`
-- `sklearn` neu that su can ML
+- `math`
+- `statistics`
 
 ## Runner local toi thieu
 

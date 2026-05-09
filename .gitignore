@@ -14,8 +14,12 @@ backend-dev.log
 backend-dev.err.log
 backend/.test-runtime/
 ai_logs.db
+*.db-wal
+*.db-shm
 *.sqlite
 *.sqlite3
+*.sqlite-wal
+*.sqlite-shm
 data/
 runs/
 __pycache__/

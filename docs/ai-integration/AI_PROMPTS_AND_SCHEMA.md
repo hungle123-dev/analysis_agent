@@ -4,6 +4,32 @@
 
 Prompt engineering cua module AI phai phuc vu dung yeu cau cua thay: AI chi de xuat/viet code/giai thich, con nguoi moi la nguoi phe duyet va code chi chay local sau khi duoc approve.
 
+## Cau hinh provider nhanh cho ds2api
+
+Khi dung ds2api, nen uu tien model khong thinking cho thao tac tao proposal/code ngan:
+
+```env
+AI_PROVIDER=deepseek
+DEEPSEEK_BASE_URL=http://127.0.0.1:5001
+DEEPSEEK_MODEL=deepseek-v4-flash-nothinking
+DEEPSEEK_MAX_TOKENS=2200
+DEEPSEEK_TEMPERATURE=0.2
+DEEPSEEK_TIMEOUT_SECONDS=60
+DEEPSEEK_THINKING=disabled
+```
+
+Ly do: ung dung can code de nguoi dung review, khong can model sinh reasoning dai. Sau moi lan generate, xem `ai.proposal.generated` trong Logs de kiem tra `llm_duration_ms`, token usage va cache hit/miss.
+
+## UX latency
+
+Frontend nen goi `POST /api/ai/proposals/jobs` thay vi cho request sync doi den khi model tra xong. Flow polling:
+
+```text
+Generate -> job_id -> poll status -> proposal_id -> hien code cho nguoi dung review
+```
+
+Flow nay khong lam model chay nhanh hon, nhung tranh cam giac UI bi dung trong 20+ giay khi dung ds2api.
+
 Prompt khong duoc de AI tra ve markdown lan man. Provider that nhu Gemini/OpenAI/Ollama can tra JSON dung schema de backend validate truoc khi hien thi cho frontend.
 
 Implementation source:

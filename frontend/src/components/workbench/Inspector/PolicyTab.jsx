@@ -2,7 +2,7 @@ import React from "react";
 import { AlertTriangle, Check } from "lucide-react";
 
 const defaultRules = [
-  ["Import allowlist", "Only pandas, numpy, matplotlib, seaborn, plotly are allowed."],
+  ["Import allowlist", "Only pandas, numpy, matplotlib, seaborn, math, and statistics are allowed."],
   ["No shell access", "os.system, subprocess, socket, requests, urllib are blocked."],
   ["Output scoped", "Generated files must stay under outputs/{run_id}."],
   ["Approval required", "Execution rejects proposals without matching approved code hash."]

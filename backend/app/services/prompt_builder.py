@@ -5,7 +5,18 @@ from typing import Any
 
 from backend.app.schemas import CreateProposalRequest, DatasetContext
 
-ALLOWED_LIBRARIES = ["pandas", "numpy", "matplotlib", "seaborn", "math", "statistics"]
+ALLOWED_LIBRARIES = [
+    "pandas",
+    "numpy",
+    "matplotlib",
+    "matplotlib.dates",
+    "matplotlib.ticker",
+    "seaborn",
+    "math",
+    "statistics",
+    "datetime",
+    "collections",
+]
 
 PROPOSAL_JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -53,7 +64,10 @@ Quy tac bat buoc:
 - Code Python phai gia dinh dataframe dau vao ten la df.
 - Truoc khi bien doi du lieu, code phai tao ban sao: work_df = df.copy().
 - Khong duoc sua df goc, khong duoc ghi de dataset goc.
-- Chi duoc ghi output vao outputs_dir do backend cung cap.
+- Chi duoc ghi output vao outputs_dir bang dang: outputs_dir / "ten_file.ext"; khong dung thu muc con, "..", absolute path.
+- Co the gan bien trung gian an toan: chart_path = outputs_dir / "chart.png"; sau do plt.savefig(chart_path).
+- Duoi file output nen dung dung loai: chart .png/.jpg/.jpeg/.svg/.webp/.pdf; bang .csv/.xlsx/.html/.json/.md/.parquet; text .txt/.log/.md/.json.
+- Khong dung open()/write() tru khi that su can file text; uu tien print() de hien thi nhan xet va DataFrame.to_csv(...) de luu bang.
 - Khong duoc doc file khac, goi shell, goi network, import module nguy hiem.
 - Moi khoi code quan trong phai co comment tieng Viet giai thich thao tac.
 - Tra ve duy nhat JSON dung schema, khong boc markdown, khong them van ban ben ngoai JSON.

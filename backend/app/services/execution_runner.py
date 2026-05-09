@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -13,27 +14,30 @@ from backend.app.db.storage import append_event, connect, now_iso
 from backend.app.schemas import ExecutionRequest, ExecutionResponse
 from backend.app.services.dataset_service import get_dataset_path
 from backend.app.services.policy_checker import validate_code
-from backend.app.services.proposal_service import get_proposal_row
 
 
 def execute_proposal(payload: ExecutionRequest) -> ExecutionResponse:
-    proposal = get_proposal_row(payload.proposal_id)
-    if proposal["status"] != "approved":
-        raise HTTPException(status_code=409, detail="Proposal must be approved before execution")
-    if proposal["dataset_id"] != payload.dataset_id:
-        raise HTTPException(status_code=400, detail="Dataset mismatch")
-    if proposal["code_hash"] != payload.code_hash:
-        raise HTTPException(status_code=409, detail="Code hash mismatch")
+    try:
+        get_dataset_path(payload.dataset_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Dataset not found") from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
+    proposal = _claim_approved_proposal(payload)
     code = proposal["edited_code"] or proposal["ai_code"]
     policy_errors = validate_code(code)
     if policy_errors:
         append_event(proposal["trace_id"], "execution.policy_rejected", "system", {"errors": policy_errors})
+        _set_proposal_status(payload.proposal_id, "failed")
         raise HTTPException(status_code=400, detail={"policy_errors": policy_errors})
 
     run_id = f"run_{uuid.uuid4().hex[:8]}"
     append_event(proposal["trace_id"], "execution.started", payload.requested_by, {"run_id": run_id})
-    result = run_code(run_id, payload.dataset_id, code)
+    try:
+        result = run_code(run_id, payload.dataset_id, code)
+    except Exception as exc:
+        result = _failed_run_result(str(exc))
     append_event(proposal["trace_id"], f"execution.{result['status']}", "system", {"run_id": run_id})
 
     with connect() as conn:
@@ -77,9 +81,37 @@ def execute_proposal(payload: ExecutionRequest) -> ExecutionResponse:
     )
 
 
-def run_code(run_id: str, dataset_id: str, code: str) -> dict:
-    import json
+def _claim_approved_proposal(payload: ExecutionRequest) -> dict:
+    with connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute("SELECT * FROM proposals WHERE proposal_id = ?", (payload.proposal_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Proposal not found")
+        if row["status"] != "approved":
+            raise HTTPException(status_code=409, detail="Proposal must be approved before execution")
+        if row["dataset_id"] != payload.dataset_id:
+            raise HTTPException(status_code=400, detail="Dataset mismatch")
+        if row["code_hash"] != payload.code_hash:
+            raise HTTPException(status_code=409, detail="Code hash mismatch")
 
+        updated = conn.execute(
+            "UPDATE proposals SET status = 'running', updated_at = ? WHERE proposal_id = ? AND status = 'approved'",
+            (now_iso(), payload.proposal_id),
+        )
+        if updated.rowcount != 1:
+            raise HTTPException(status_code=409, detail="Proposal is already running or no longer approved")
+        return dict(row)
+
+
+def _set_proposal_status(proposal_id: str, status: str) -> None:
+    with connect() as conn:
+        conn.execute(
+            "UPDATE proposals SET status = ?, updated_at = ? WHERE proposal_id = ?",
+            (status, now_iso(), proposal_id),
+        )
+
+
+def run_code(run_id: str, dataset_id: str, code: str) -> dict:
     try:
         timeout_seconds = max(1, int(os.getenv("EXECUTION_TIMEOUT_SECONDS", "30")))
     except ValueError:
@@ -118,13 +150,13 @@ exec(compile(user_code, {str(code_path)!r}, "exec"), {{"df": df, "pd": pd, "plt"
             timeout=timeout_seconds,
         )
         status = "succeeded" if completed.returncode == 0 else "failed"
-        stdout = completed.stdout
-        stderr = completed.stderr
+        stdout = _limit_output(completed.stdout)
+        stderr = _limit_output(completed.stderr)
         return_code = completed.returncode
     except subprocess.TimeoutExpired as exc:
         status = "failed"
-        stdout = exc.stdout or ""
-        stderr = (exc.stderr or "") + f"\nExecution timed out after {timeout_seconds} seconds."
+        stdout = _limit_output(exc.stdout or "")
+        stderr = _limit_output((exc.stderr or "") + f"\nExecution timed out after {timeout_seconds} seconds.")
         return_code = -1
 
     artifacts = [
@@ -149,6 +181,31 @@ exec(compile(user_code, {str(code_path)!r}, "exec"), {{"df": df, "pd": pd, "plt"
         "duration_ms": int((finished_dt - started_dt).total_seconds() * 1000),
         "return_code": return_code,
     }
+
+
+def _failed_run_result(message: str) -> dict:
+    finished_at = now_iso()
+    return {
+        "status": "failed",
+        "stdout": "",
+        "stderr": _limit_output(message),
+        "artifacts": [],
+        "artifacts_json": "[]",
+        "started_at": finished_at,
+        "finished_at": finished_at,
+        "duration_ms": 0,
+        "return_code": -1,
+    }
+
+
+def _limit_output(value: str) -> str:
+    try:
+        max_chars = max(1_000, int(os.getenv("EXECUTION_MAX_OUTPUT_CHARS", "20000")))
+    except ValueError:
+        max_chars = 20_000
+    if len(value) <= max_chars:
+        return value
+    return value[:max_chars] + f"\n...[truncated to {max_chars} characters]"
 
 
 def _infer_artifact_type(path) -> str:
