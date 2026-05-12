@@ -65,17 +65,17 @@ export function BottomPanel({
       </div>
       <div className="flex min-h-0 flex-col overflow-x-hidden overflow-y-auto">
         {activeTab === "result" && (
-          <div className="flex h-full min-h-0 min-w-0 flex-col overflow-x-auto p-3 [-webkit-overflow-scrolling:touch]">
+          <div className="min-w-0 p-3">
             <ResultTab executionResult={executionResult} hasResult={hasResult} />
           </div>
         )}
         {activeTab === "logs" && (
-          <div className="h-full overflow-auto p-3">
+          <div className="p-3">
             <LogsTab events={events} />
           </div>
         )}
         {activeTab === "policy" && (
-          <div className="h-full overflow-auto p-3">
+          <div className="p-3">
             <PolicyTab issues={policyIssues} />
           </div>
         )}

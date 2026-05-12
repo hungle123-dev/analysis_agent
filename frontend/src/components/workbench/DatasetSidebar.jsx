@@ -2,12 +2,12 @@ import React from "react";
 import { ChevronDown, Database, FileText, GitCommitHorizontal } from "lucide-react";
 
 const workflowSteps = [
-  "yêu cầu",
-  "đề xuất AI",
-  "xem xét",
-  "phê duyệt",
-  "chạy local",
-  "nhật ký kiểm toán"
+  "Yêu cầu",
+  "Đề xuất AI",
+  "Xem xét",
+  "Phê duyệt",
+  "Chạy local",
+  "Nhật ký (Logs)"
 ];
 
 export function DatasetSidebar({ activeDatasetId, dataset, datasets, onDatasetChange, onResizeStart }) {

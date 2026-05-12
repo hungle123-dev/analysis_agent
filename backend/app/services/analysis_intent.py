@@ -35,7 +35,12 @@ INTENT_SPECS: tuple[IntentSpec, ...] = (
             "theo thang",
             "theo ngay",
             "theo nam",
-            "theo quy",
+            # "theo quy" đã bị đổi thành "theo quy " (có khoảng trắng) và "theo quy t"
+            # để tránh match nhầm "theo quy mo" (quy mô diện tích)
+            "theo quy t",   # theo quý (Q1/Q2...)
+            "theo quy nam", # theo quý năm
+            "quy 1", "quy 2", "quy 3", "quy 4",
+            "q1", "q2", "q3", "q4",
             "date",
             "month",
             "year",
