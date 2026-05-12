@@ -13,11 +13,11 @@ export function TitleBar({
     <header className="flex h-9 min-w-0 items-center gap-3 border-b border-line bg-titlebar px-3 text-xs text-muted">
       <div className="flex min-w-0 shrink-0 items-baseline gap-2">
         <span className="font-semibold text-data-blue">AI</span>
-        <span className="truncate font-medium text-text-main">Bàn làm việc phân tích</span>
+        <span className="truncate font-medium text-text-main">Hỗ trợ phân tích</span>
       </div>
 
       <p className="min-w-0 flex-1 truncate text-center text-[11px] text-dim md:text-xs">
-        analysis-agent · con người phê duyệt trước khi thực thi
+        analysis-agent · Human in Loop
       </p>
 
       <div className="flex shrink-0 items-center gap-1">
