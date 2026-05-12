@@ -26,8 +26,8 @@ const SESSION_ID = import.meta.env.VITE_SESSION_ID ?? "demo_01";
 const PROPOSAL_JOB_POLL_INTERVAL_MS = Number(import.meta.env.VITE_PROPOSAL_JOB_POLL_INTERVAL_MS ?? 2000);
 const PROPOSAL_JOB_MAX_POLLS = Number(import.meta.env.VITE_PROPOSAL_JOB_MAX_POLLS ?? 300);
 
-const EMPTY_CODE = `# Code proposal will appear here after AI generates it.
-# AI-generated code must be reviewed, edited if needed, and approved before local execution.`;
+const EMPTY_CODE = `# Code đề xuất sẽ xuất hiện ở đây sau khi AI tạo xong.
+# Code do AI tạo ra phải được xem xét, chỉnh sửa nếu cần và phê duyệt trước khi chạy local.`;
 
 const EMPTY_DATASET = {
   id: "",
@@ -130,7 +130,7 @@ export default function App() {
           setActiveDatasetId(items[0].id);
         }
       })
-      .catch((err) => setError(`Backend unavailable: ${err.message}`));
+      .catch((err) => setError(`Backend không khả dụng: ${err.message}`));
   }, []);
 
   useEffect(() => {
@@ -140,7 +140,7 @@ export default function App() {
       .then((context) => {
         setDatasets((items) => items.map((item) => (item.id === context.id ? context : item)));
       })
-      .catch((err) => setError(`Dataset context failed: ${err.message}`));
+      .catch((err) => setError(`Tải thông tin dataset thất bại: ${err.message}`));
   }, [activeDatasetId]);
 
   const timelineEvents = useMemo(
@@ -184,7 +184,7 @@ export default function App() {
 
   async function generateProposal() {
     if (!activeDatasetId) {
-      setError("No registered dataset is available. Start the backend and reload datasets first.");
+      setError("Không có dataset nào khả dụng. Hãy khởi động backend và tải lại trang.");
       return;
     }
     setError("");
@@ -193,7 +193,7 @@ export default function App() {
     setIsGenerating(true);
     setProposalJob(null);
     setStatus("generating");
-    addEvent("ai.proposal.job_started", CURRENT_USER_ID, "Starting background proposal generation");
+    addEvent("ai.proposal.job_started", CURRENT_USER_ID, "Bắt đầu tạo đề xuất AI ở nền");
     try {
       const job = await api.createProposalJob({
         session_id: SESSION_ID,
@@ -202,11 +202,11 @@ export default function App() {
         mode: "generate_code"
       });
       setProposalJob(job);
-      addEvent("ai.proposal.job_queued", "system", `Job ${job.job_id} queued`);
+      addEvent("ai.proposal.job_queued", "system", `Tác vụ ${job.job_id} đã được xếp hàng`);
 
       const finalJob = await waitForProposalJob(job.job_id);
       if (finalJob.status !== "succeeded" || !finalJob.proposal_id) {
-        throw new Error(finalJob.error || "Proposal generation failed");
+        throw new Error(finalJob.error || "Tạo đề xuất thất bại");
       }
 
       const nextProposal = await api.getProposal(finalJob.proposal_id);
@@ -299,7 +299,7 @@ export default function App() {
     } catch (err) {
       setError(err.message);
       setInspectorTab("logs");
-      addEvent("ai.approval.reject_failed", "system", err.message);
+    addEvent("ai.approval.reject_failed", "system", err.message);
     } finally {
       setIsRejecting(false);
     }

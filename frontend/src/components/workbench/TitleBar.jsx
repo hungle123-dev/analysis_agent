@@ -13,18 +13,18 @@ export function TitleBar({
     <header className="flex h-9 min-w-0 items-center gap-3 border-b border-line bg-titlebar px-3 text-xs text-muted">
       <div className="flex min-w-0 shrink-0 items-baseline gap-2">
         <span className="font-semibold text-data-blue">AI</span>
-        <span className="truncate font-medium text-text-main">Analysis Workbench</span>
+        <span className="truncate font-medium text-text-main">Bàn làm việc phân tích</span>
       </div>
 
       <p className="min-w-0 flex-1 truncate text-center text-[11px] text-dim md:text-xs">
-        analysis-agent · human approval before execution
+        analysis-agent · con người phê duyệt trước khi thực thi
       </p>
 
       <div className="flex shrink-0 items-center gap-1">
-        <span className="hidden text-dim xl:inline">Layout</span>
-        <LayoutButton active={isPrimarySidebarOpen} icon={PanelLeft} label="Toggle primary sidebar" onClick={onTogglePrimarySidebar} />
-        <LayoutButton active={isBottomPanelOpen} icon={PanelBottom} label="Toggle bottom panel" onClick={onToggleBottomPanel} />
-        <LayoutButton active={isSecondarySidebarOpen} icon={PanelRight} label="Toggle chat sidebar" onClick={onToggleSecondarySidebar} />
+        <span className="hidden text-dim xl:inline">Bố cục</span>
+        <LayoutButton active={isPrimarySidebarOpen} icon={PanelLeft} label="Ẩn/hiện thanh dataset" onClick={onTogglePrimarySidebar} />
+        <LayoutButton active={isBottomPanelOpen} icon={PanelBottom} label="Ẩn/hiện panel dưới" onClick={onToggleBottomPanel} />
+        <LayoutButton active={isSecondarySidebarOpen} icon={PanelRight} label="Ẩn/hiện thanh chat AI" onClick={onToggleSecondarySidebar} />
       </div>
     </header>
   );
@@ -42,6 +42,7 @@ function LayoutButton({ active, icon: Icon, label, onClick }) {
       title={label}
       type="button"
     >
+
       <Icon size={15} />
     </button>
   );

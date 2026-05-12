@@ -2,12 +2,12 @@ import React from "react";
 import { ChevronDown, Database, FileText, GitCommitHorizontal } from "lucide-react";
 
 const workflowSteps = [
-  "request",
-  "proposal",
-  "review",
-  "approval",
-  "local run",
-  "audit log"
+  "yêu cầu",
+  "đề xuất AI",
+  "xem xét",
+  "phê duyệt",
+  "chạy local",
+  "nhật ký kiểm toán"
 ];
 
 export function DatasetSidebar({ activeDatasetId, dataset, datasets, onDatasetChange, onResizeStart }) {
@@ -15,7 +15,7 @@ export function DatasetSidebar({ activeDatasetId, dataset, datasets, onDatasetCh
 
   return (
     <aside className="relative min-w-0 overflow-auto border-r border-line bg-shell text-sm max-[980px]:absolute max-[980px]:inset-y-0 max-[980px]:left-11 max-[980px]:z-30 max-[980px]:w-[min(320px,calc(100vw-44px))] max-[980px]:shadow-2xl max-[760px]:left-0 max-[760px]:max-h-[72vh]">
-      <ExplorerSection title="Datasets">
+      <ExplorerSection title="Dữ liệu">
         <div className="grid gap-0.5">
           {datasets.map((item) => (
             <button
@@ -33,9 +33,9 @@ export function DatasetSidebar({ activeDatasetId, dataset, datasets, onDatasetCh
         </div>
       </ExplorerSection>
 
-      <ExplorerSection title="Schema">
+      <ExplorerSection title="Cấu trúc">
         {columns.length === 0 ? (
-          <div className="px-3 py-2 text-xs text-dim">No dataset context loaded.</div>
+          <div className="px-3 py-2 text-xs text-dim">Chưa tải thông tin dataset.</div>
         ) : (
           <div className="grid gap-0.5">
             {columns.map((column) => (
@@ -44,7 +44,7 @@ export function DatasetSidebar({ activeDatasetId, dataset, datasets, onDatasetCh
                 <span className="truncate font-medium">{column.name}</span>
                 <span className="text-[11px] text-mint">{column.dtype}</span>
                 <span className="col-span-3 ml-5 text-[11px] text-dim">
-                  {column.nulls ?? column.nullable_count ?? 0} null values
+                  {column.nulls ?? column.nullable_count ?? 0} giá trị null
                 </span>
               </div>
             ))}
@@ -52,7 +52,7 @@ export function DatasetSidebar({ activeDatasetId, dataset, datasets, onDatasetCh
         )}
       </ExplorerSection>
 
-      <ExplorerSection title="Workflow">
+      <ExplorerSection title="Quy trình">
         <div className="grid gap-0.5 px-2 py-1">
           {workflowSteps.map((step, index) => (
             <div className="flex items-center gap-2 px-1 py-1 text-xs text-muted" key={step}>
@@ -62,7 +62,7 @@ export function DatasetSidebar({ activeDatasetId, dataset, datasets, onDatasetCh
           ))}
         </div>
       </ExplorerSection>
-      <ResizeHandle ariaLabel="Resize dataset sidebar" edge="right" onResizeStart={onResizeStart} />
+      <ResizeHandle ariaLabel="Kéo để thay đổi kích thước" edge="right" onResizeStart={onResizeStart} />
     </aside>
   );
 }

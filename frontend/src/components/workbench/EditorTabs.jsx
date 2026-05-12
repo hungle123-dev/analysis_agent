@@ -16,8 +16,8 @@ export function EditorTabs({ lineCount, proposalId }) {
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-3 px-3">
-        <span>{lineCount} lines</span>
-        <code className="hidden text-dim sm:inline">{proposalId ?? "no proposal"}</code>
+        <span>{lineCount} dòng</span>
+        <code className="hidden text-dim sm:inline">{proposalId ?? "chưa có proposal"}</code>
       </div>
     </div>
   );

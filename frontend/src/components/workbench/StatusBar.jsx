@@ -15,7 +15,7 @@ export function StatusBar({ proposal, status }) {
         </span>
       </div>
       <div className="flex shrink-0 items-center gap-4">
-        <span className="hidden md:inline">{proposal?.code_hash ? proposal.code_hash.slice(0, 18) : "unapproved"}</span>
+        <span className="hidden md:inline">{proposal?.code_hash ? proposal.code_hash.slice(0, 18) : "chưa phê duyệt"}</span>
         <span className="flex items-center gap-1">
           <Braces size={13} />
           Python

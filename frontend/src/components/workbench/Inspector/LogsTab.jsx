@@ -3,6 +3,9 @@ import React from "react";
 export function LogsTab({ events }) {
   return (
     <div className="flex flex-col gap-2">
+      {events.length === 0 && (
+        <p className="px-2 py-4 text-center text-xs text-dim">Chưa có sự kiện nào. Tạo đề xuất để bắt đầu ghi nhật ký.</p>
+      )}
       {events.map((event) =>
         event.type === "trace.separator" ? (
           <div

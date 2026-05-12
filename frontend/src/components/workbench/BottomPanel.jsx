@@ -5,9 +5,9 @@ import { PolicyTab } from "./Inspector/PolicyTab";
 import { ResultTab } from "./Inspector/ResultTab";
 
 const tabs = [
-  { id: "result", label: "Output", icon: BarChart3 },
-  { id: "logs", label: "Logs", icon: History },
-  { id: "policy", label: "Policy", icon: ShieldCheck }
+  { id: "result", label: "Kết quả", icon: BarChart3 },
+  { id: "logs", label: "Nhật ký (logs)", icon: History },
+  { id: "policy", label: "Chính sách (policy)", icon: ShieldCheck }
 ];
 
 export function BottomPanel({
@@ -55,10 +55,10 @@ export function BottomPanel({
           </div>
         )}
         <button
-          aria-label="Hide bottom panel"
+          aria-label="Ẩn panel dưới"
           className="grid h-7 w-7 place-items-center text-dim hover:bg-white/[0.055] hover:text-text-main"
           onClick={onClose}
-          title="Hide bottom panel"
+          title="Ẩn panel dưới"
         >
           <X size={14} />
         </button>
