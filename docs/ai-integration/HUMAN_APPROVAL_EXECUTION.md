@@ -62,8 +62,13 @@ Whitelist de demo:
 - `numpy`
 - `matplotlib`
 - `seaborn`
+- `scipy.stats`, `scipy.optimize`, `scipy.signal`
+- `sklearn.metrics`, `sklearn.model_selection`, `sklearn.preprocessing`, `sklearn.linear_model`
+- `statsmodels.api`, `statsmodels.formula.api`, `statsmodels.tsa`
 - `math`
 - `statistics`
+
+Các nhánh có thể đọc dữ liệu ngoài hoặc tải dataset mẫu như `scipy.io`, `sklearn.datasets`, `statsmodels.datasets` không nằm trong whitelist.
 
 ## Runner local toi thieu
 

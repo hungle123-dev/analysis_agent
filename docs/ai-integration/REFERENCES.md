@@ -6,8 +6,8 @@
 
 - OpenAI Structured Outputs: https://developers.openai.com/api/docs/guides/structured-outputs
   - Ly do dung: ep AI tra ve JSON dung schema, backend parse/validate de hon.
-- Gemini Structured Outputs: https://ai.google.dev/gemini-api/docs/structured-output
-  - Ly do dung: neu nhom dung Gemini, van co cach yeu cau output theo JSON schema.
+- OpenAI-compatible chat completions pattern
+  - Ly do dung: ds2api/DeepSeek co the duoc boc theo API chat-compatible, giup provider adapter de thay the.
 
 ### API/backend
 

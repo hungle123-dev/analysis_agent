@@ -1,8 +1,17 @@
 from __future__ import annotations
 
+import os
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
+
+
+def _default_session_id() -> str:
+    return os.getenv("DEFAULT_SESSION_ID", "demo_01")
+
+
+def _default_actor_id() -> str:
+    return os.getenv("DEFAULT_ACTOR_ID", "student_01")
 
 
 class ColumnInfo(BaseModel):
@@ -10,6 +19,9 @@ class ColumnInfo(BaseModel):
     dtype: str
     nullable_count: int
     sample_values: list[Any] = Field(default_factory=list)
+    unique_count: int | None = None
+    top_values: list[dict[str, Any]] = Field(default_factory=list)
+    numeric_summary: dict[str, float | int | None] = Field(default_factory=dict)
 
 
 class DatasetSummary(BaseModel):
@@ -24,7 +36,7 @@ class DatasetContext(DatasetSummary):
 
 
 class CreateProposalRequest(BaseModel):
-    session_id: str = "demo_01"
+    session_id: str = Field(default_factory=_default_session_id)
     dataset_id: str
     user_request: str
     mode: Literal["generate_code", "suggestions", "explain_result"] = "generate_code"
@@ -56,17 +68,17 @@ class ProposalJobResponse(BaseModel):
 
 
 class UpdateProposalRequest(BaseModel):
-    edited_by: str = "student_01"
+    edited_by: str = Field(default_factory=_default_actor_id)
     edited_code: str
 
 
 class ApproveProposalRequest(BaseModel):
-    approved_by: str = "student_01"
+    approved_by: str = Field(default_factory=_default_actor_id)
     approval_note: str = ""
 
 
 class RejectProposalRequest(BaseModel):
-    rejected_by: str = "student_01"
+    rejected_by: str = Field(default_factory=_default_actor_id)
     rejection_reason: str = ""
 
 
@@ -80,7 +92,7 @@ class ExecutionRequest(BaseModel):
     proposal_id: str
     dataset_id: str
     code_hash: str
-    requested_by: str = "student_01"
+    requested_by: str = Field(default_factory=_default_actor_id)
 
 
 class Artifact(BaseModel):
@@ -102,6 +114,9 @@ class ExecutionResponse(BaseModel):
     stdout: str
     stderr: str
     artifacts: list[Artifact]
+    ai_insight: str | None = None
+    ai_insight_status: Literal["not_requested", "succeeded", "failed"] = "not_requested"
+    ai_insight_error: str | None = None
     return_code: int
     duration_ms: int
     started_at: str

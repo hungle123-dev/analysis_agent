@@ -61,6 +61,9 @@ def init_db() -> None:
               stdout TEXT NOT NULL,
               stderr TEXT NOT NULL,
               artifacts_json TEXT NOT NULL,
+              ai_insight TEXT,
+              ai_insight_status TEXT DEFAULT 'not_requested',
+              ai_insight_error TEXT,
               started_at TEXT NOT NULL,
               finished_at TEXT NOT NULL,
               duration_ms INTEGER DEFAULT 0,
@@ -111,6 +114,12 @@ def _ensure_execution_columns(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE executions ADD COLUMN duration_ms INTEGER DEFAULT 0")
     if "return_code" not in columns:
         conn.execute("ALTER TABLE executions ADD COLUMN return_code INTEGER DEFAULT 0")
+    if "ai_insight" not in columns:
+        conn.execute("ALTER TABLE executions ADD COLUMN ai_insight TEXT")
+    if "ai_insight_status" not in columns:
+        conn.execute("ALTER TABLE executions ADD COLUMN ai_insight_status TEXT DEFAULT 'not_requested'")
+    if "ai_insight_error" not in columns:
+        conn.execute("ALTER TABLE executions ADD COLUMN ai_insight_error TEXT")
 
 
 def append_event(trace_id: str, event_type: str, actor: str, payload: dict[str, Any]) -> None:

@@ -34,7 +34,7 @@ AI must not silently execute code. Human approval is part of the product require
 Use clear module boundaries:
 
 - `DatasetRegistry`: dataset metadata, schema, sample rows, allowed dataset IDs.
-- `LLMProvider`: adapter for Gemini, OpenAI, Ollama, or mock provider.
+- `LLMProvider`: adapter for DeepSeek/ds2api, OpenAI-compatible, Ollama, or mock provider.
 - `ProposalService`: creates AI proposals from user request + dataset context.
 - `ApprovalService`: stores review/approval state and code hashes.
 - `ExecutionRunner`: executes approved code locally.

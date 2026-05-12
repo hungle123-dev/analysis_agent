@@ -72,7 +72,7 @@ Khong hardcode:
 Thay vao do dung cac lop/khai niem:
 
 - `DatasetRegistry`: quan ly dataset va schema.
-- `LLMProvider`: adapter cho Gemini/OpenAI/Ollama.
+- `LLMProvider`: adapter cho DeepSeek/ds2api, OpenAI-compatible, Ollama hoac mock.
 - `ProposalService`: tao proposal tu user request + dataset context.
 - `ExecutionRunner`: chay code local, co the doi subprocess sang Docker.
 - `ArtifactStore`: luu chart/table theo `run_id`.
@@ -219,8 +219,8 @@ generate_proposal(user_request, dataset_context) -> Proposal
 
 Adapter co the la:
 
-- `GeminiProvider`
-- `OpenAIProvider`
+- `DeepSeekProvider`
+- `OpenAICompatibleProvider`
 - `OllamaProvider`
 - `MockProvider` de demo/test khi chua co API key
 
@@ -250,7 +250,7 @@ Implementation co the la:
 
 ## 6. Nhung dieu can tranh
 
-- Khong de React goi truc tiep Gemini/OpenAI.
+- Khong de React goi truc tiep DeepSeek/OpenAI-compatible provider.
 - Khong de AI API goi execution API.
 - Khong cho execution API nhan raw code chua approve.
 - Khong hardcode cot dataset trong prompt.

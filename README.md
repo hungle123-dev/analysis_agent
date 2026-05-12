@@ -29,7 +29,7 @@ This project was built for an AI integration requirement in a Data Visualization
 | Code editor | Monaco Editor |
 | AI provider | Mock, DeepSeek, or OpenAI-compatible API such as ds2api |
 | Analysis runtime | Local Python subprocess |
-| Data/Charts | pandas, matplotlib |
+| Data/Charts | pandas, matplotlib, seaborn, scipy, scikit-learn, statsmodels |
 | Tests | pytest |
 
 ## Core Safety Rules
@@ -96,6 +96,7 @@ SQLite Audit Log
 │   │   └── styles.css
 │   ├── package.json
 │   └── vite.config.js
+├── ds2api/                  # optional local ds2api Docker setup
 ├── docs/ai-integration/      # design, API, prompts, demo, traceability docs
 ├── PHANCONG.md               # team task split
 └── AGENTS.md                 # project guidance for coding agents
@@ -126,7 +127,8 @@ Example:
 | Module | Responsibility |
 | --- | --- |
 | `DatasetRegistry` / `dataset_service.py` | Dataset metadata, schema, sample values, allowed dataset IDs |
-| `LLMProvider` / `llm_provider.py` | Adapter boundary for mock, Gemini, OpenAI, or Ollama providers |
+| `analysis_intent.py` / `dataset_capabilities.py` | Classifies user prompts into analysis intents and checks whether the selected dataset has the required capabilities |
+| `LLMProvider` / `llm_provider.py` | Adapter boundary for mock, DeepSeek, or OpenAI-compatible providers such as ds2api |
 | `prompt_builder.py` | Prompt rules and structured proposal schema |
 | `proposal_service.py` | Create, edit, approve, reject, and hash AI proposals |
 | `policy_checker.py` | AST-based unsafe-code validation |
@@ -179,12 +181,39 @@ Recommended ds2api settings:
 AI_PROVIDER=deepseek
 DEEPSEEK_BASE_URL=http://127.0.0.1:5001
 DEEPSEEK_MODEL=deepseek-v4-flash-nothinking
+DEEPSEEK_INSIGHT_MODEL=deepseek-v4-flash-nothinking
 DEEPSEEK_MAX_TOKENS=2200
+DEEPSEEK_INSIGHT_MAX_TOKENS=900
 DEEPSEEK_TIMEOUT_SECONDS=60
 DEEPSEEK_THINKING=disabled
+AI_FALLBACK_TO_MOCK_ON_ERROR=false
+AI_EXPLAIN_RESULT_ENABLED=true
+AI_EXPLAIN_RESULT_PROVIDER=deepseek
+AI_EXPLAIN_RESULT_TIMEOUT_SECONDS=45
+EXECUTION_TIMEOUT_SECONDS=60
 ```
 
-Each generated proposal audit log includes `llm_duration_ms`, model, finish reason, prompt size, and token/cache usage when the provider returns it.
+Each generated proposal audit log includes `llm_duration_ms`, model, finish reason, prompt size, and token/cache usage when the provider returns it. Keep mock fallback disabled for real demos so the app fails honestly instead of fabricating code. Result insight uses ds2api/DeepSeek after approved local execution and analyzes only stdout, table previews, and artifact metadata; charts are displayed as visual illustration. The insight prompt is evidence-only and does not include the full generated code, reducing hallucinated commentary.
+
+Before calling the LLM, the backend runs an intent/capability planner. It maps prompts to general analysis intents such as distribution, correlation, group comparison, time series, revenue/profit, funnel, customer retention, and coordinate map. If the selected dataset lacks the required columns, the backend returns a text-only proposal explaining the missing schema instead of letting the AI invent columns or silently switch to an unrelated chart.
+
+Optional local ds2api setup lives in `ds2api/`:
+
+```powershell
+cd ds2api
+Copy-Item .env.example .env
+Copy-Item config.example.json config.json
+# edit config.json with real DeepSeek account credentials / allowed API keys
+docker compose up -d
+Invoke-WebRequest http://127.0.0.1:5001/v1/models -UseBasicParsing
+```
+
+The root `.env` should use the same key configured in `ds2api/config.json`:
+
+```env
+DEEPSEEK_BASE_URL=http://127.0.0.1:5001
+DEEPSEEK_API_KEY=ds2api-local-key
+```
 
 ### 2. Frontend
 

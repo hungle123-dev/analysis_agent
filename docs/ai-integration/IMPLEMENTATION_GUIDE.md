@@ -143,7 +143,7 @@ Huong FastAPI + React JavaScript la oke va nen chot neu nhom muon san pham nhin 
 2. Tao UI hien code + approve.
 3. Tao execution local chay code approved.
 4. Tao log truy xuat lai.
-5. Sau do moi gan Gemini/OpenAI/Ollama that.
+5. Sau do moi gan DeepSeek/ds2api, OpenAI-compatible hoac Ollama that.
 
 Lam theo thu tu nay se tranh bi ket o API key/model trong khi workflow chinh chua xong.
 

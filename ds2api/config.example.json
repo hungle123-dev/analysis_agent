@@ -1,0 +1,54 @@
+{
+  "_comment": "Copy this file to config.json and fill real DeepSeek account credentials locally. Do not commit config.json.",
+  "_doc": "https://github.com/CJackHwang/ds2api/blob/main/docs/DEPLOY.en.md",
+  "keys": [
+    "ds2api-local-key"
+  ],
+  "api_keys": [
+    {
+      "key": "ds2api-local-key",
+      "name": "Local Analysis Workbench key",
+      "remark": "Use this value as DEEPSEEK_API_KEY in the project .env"
+    }
+  ],
+  "accounts": [
+    {
+      "_comment": "Replace with your real DeepSeek web login account on your machine.",
+      "name": "primary",
+      "remark": "Local demo account",
+      "email": "your-email@example.com",
+      "password": "your-password"
+    }
+  ],
+  "model_aliases": {
+    "deepseek-v4-flash-nothinking": "deepseek-v4-flash",
+    "deepseek-v4-flash": "deepseek-v4-flash",
+    "deepseek-v4-pro": "deepseek-v4-pro"
+  },
+  "responses": {
+    "store_ttl_seconds": 900
+  },
+  "current_input_file": {
+    "enabled": true,
+    "min_chars": 0
+  },
+  "thinking_injection": {
+    "enabled": true,
+    "prompt": ""
+  },
+  "embeddings": {
+    "provider": "deterministic"
+  },
+  "admin": {
+    "jwt_expire_hours": 24
+  },
+  "runtime": {
+    "account_max_inflight": 1,
+    "account_max_queue": 0,
+    "global_max_inflight": 1,
+    "token_refresh_interval_hours": 6
+  },
+  "auto_delete": {
+    "mode": "none"
+  }
+}

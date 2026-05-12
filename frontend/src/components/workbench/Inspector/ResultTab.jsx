@@ -4,16 +4,16 @@ import { EmptyState } from "../../ui/EmptyState";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 
-/** Hang 1: chart khong bien mat (min-height); hang 2: file + stdout, toi da 40% bang. */
-const CHART_GRID_ROWS = `minmax(12.5rem, 1fr) minmax(5rem, 40%)`;
+/** Hang 1: insight; hang 2: chart khong bien mat; hang 3: file + stdout. */
+const RESULT_GRID_ROWS = `minmax(7rem, auto) minmax(12.5rem, 1fr) minmax(5rem, 40%)`;
 
 export function ResultTab({ executionResult, hasResult }) {
   if (!hasResult) {
     return (
       <EmptyState
         icon={BarChart3}
-        title="No local artifacts"
-        detail="Approve the proposal and run it locally to produce chart, table, and stdout evidence."
+        title="Chưa có artifact local"
+        detail="Hãy duyệt proposal rồi chạy local để tạo biểu đồ, bảng và stdout làm bằng chứng."
       />
     );
   }
@@ -26,15 +26,35 @@ export function ResultTab({ executionResult, hasResult }) {
   return (
     <div
       className="grid h-full min-h-0 min-w-0 gap-3 overflow-auto"
-      style={{ gridTemplateRows: CHART_GRID_ROWS }}
+      style={{ gridTemplateRows: RESULT_GRID_ROWS }}
     >
       <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-white/10 bg-black/20 p-3">
         <div className="mb-2 flex shrink-0 items-center justify-between text-sm font-bold">
-          <span>Local chart artifact</span>
+          <span>AI nhận xét từ số liệu local</span>
+          <code className="text-xs text-data-blue">{executionResult?.ai_insight_status ?? "not_requested"}</code>
+        </div>
+        {executionResult?.ai_insight_status === "succeeded" && executionResult?.ai_insight ? (
+          <div className="max-h-[min(13rem,32vh)] overflow-auto whitespace-pre-wrap text-sm leading-relaxed text-text-main">
+            {executionResult.ai_insight}
+          </div>
+        ) : executionResult?.ai_insight_status === "failed" ? (
+          <div className="overflow-auto text-xs leading-relaxed text-rose-soft">
+            AI chưa tạo được nhận xét từ số liệu local: {executionResult?.ai_insight_error || "Không rõ lỗi."}
+          </div>
+        ) : (
+          <div className="text-xs leading-relaxed text-muted">
+            Chưa yêu cầu AI nhận xét vì lần chạy này chưa có stdout/bảng/artifact thật hoặc execution chưa hoàn tất.
+          </div>
+        )}
+      </div>
+
+      <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-white/10 bg-black/20 p-3">
+        <div className="mb-2 flex shrink-0 items-center justify-between text-sm font-bold">
+          <span>Biểu đồ local</span>
           <code className="text-xs text-data-blue">{executionResult?.run_id}</code>
         </div>
         <div className="mb-2 shrink-0 text-[11px] text-dim">
-          return_code={executionResult?.return_code ?? "n/a"} | duration={executionResult?.duration_ms ?? 0}ms
+          return_code={executionResult?.return_code ?? "n/a"} | thời gian={executionResult?.duration_ms ?? 0}ms
         </div>
         {chartUrl ? (
           <div className="flex min-h-0 flex-1 justify-center overflow-auto rounded-md bg-black/15 p-2">
@@ -54,7 +74,7 @@ export function ResultTab({ executionResult, hasResult }) {
           </div>
         ) : (
           <div className="grid min-h-[5rem] flex-1 place-items-center rounded-md border border-dashed border-white/10 text-xs text-muted">
-            No chart artifact returned by this run.
+            Lần chạy này không trả về biểu đồ.
           </div>
         )}
       </div>
@@ -72,7 +92,7 @@ export function ResultTab({ executionResult, hasResult }) {
         )}
 
         <pre className="max-h-[min(16rem,40vh)] min-h-[3rem] shrink-0 overflow-auto rounded-lg bg-black/35 p-3 text-xs leading-relaxed text-[#bdffcf]">
-{executionResult?.stdout || "No stdout captured."}
+{executionResult?.stdout || "Không có stdout."}
         </pre>
         {executionResult?.stderr && (
           <pre className="max-h-[min(10rem,25vh)] shrink-0 overflow-auto rounded-lg bg-rose-soft/10 p-3 text-xs leading-relaxed text-[#ffd4da]">

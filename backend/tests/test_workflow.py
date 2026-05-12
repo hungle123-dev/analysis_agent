@@ -19,6 +19,7 @@ def client(monkeypatch):
     runtime_dir.mkdir(parents=True, exist_ok=True)
 
     monkeypatch.setenv("AI_PROVIDER", "mock")
+    monkeypatch.setenv("AI_EXPLAIN_RESULT_PROVIDER", "mock")
     monkeypatch.setattr(storage, "DB_PATH", runtime_dir / "ai_logs.db")
     monkeypatch.setattr(execution_runner, "RUNS_DIR", runtime_dir / "runs")
     monkeypatch.setattr(execution_runner, "ROOT", runtime_dir)
@@ -180,6 +181,8 @@ def test_approved_proposal_executes_locally_and_returns_artifact(client: TestCli
     assert body["status"] == "succeeded"
     assert body["artifacts"]
     assert body["artifacts"][0]["type"] == "chart"
+    assert body["ai_insight_status"] == "succeeded"
+    assert body["ai_insight"]
     assert isinstance(body["duration_ms"], int)
     assert isinstance(body["return_code"], int)
     assert "started_at" in body
@@ -216,9 +219,14 @@ def test_completed_proposal_cannot_run_twice(client: TestClient):
 def test_execution_returns_table_artifacts(client: TestClient):
     proposal = create_proposal(client)
     edited_code = """
+import matplotlib.pyplot as plt
 work_df = df.copy()
 summary = work_df.groupby("region", as_index=False)["revenue"].sum()
 summary.to_csv(outputs_dir / "summary.csv", index=False)
+plt.figure(figsize=(6, 4))
+plt.bar(summary["region"], summary["revenue"])
+plt.tight_layout()
+plt.savefig(outputs_dir / "summary.png")
 print(summary.to_string(index=False))
 """
     update_response = client.patch(
@@ -238,5 +246,100 @@ print(summary.to_string(index=False))
         },
     )
     assert execution.status_code == 200
+    assert execution.json()["ai_insight_status"] == "succeeded"
     artifacts = execution.json()["artifacts"]
     assert any(item["type"] == "table" and item["name"] == "summary.csv" for item in artifacts)
+    assert any(item["type"] == "chart" and item["name"] == "summary.png" for item in artifacts)
+
+
+def test_execution_fails_when_proposal_promises_chart_but_code_creates_no_chart(client: TestClient):
+    proposal = create_proposal(client)
+    edited_code = """
+work_df = df.copy()
+summary = work_df.groupby("region", as_index=False)["revenue"].sum()
+print(summary.to_string(index=False))
+"""
+    update_response = client.patch(
+        f"/api/ai/proposals/{proposal['proposal_id']}",
+        json={"edited_by": "tester", "edited_code": edited_code},
+    )
+    assert update_response.status_code == 200
+    approval = approve_proposal(client, proposal["proposal_id"])
+
+    execution = client.post(
+        "/api/executions",
+        json={
+            "proposal_id": proposal["proposal_id"],
+            "dataset_id": "sales_2025",
+            "code_hash": approval["code_hash"],
+            "requested_by": "tester",
+        },
+    )
+
+    assert execution.status_code == 200
+    body = execution.json()
+    assert body["status"] == "failed"
+    assert body["return_code"] == 0
+    assert "did not create expected artifact(s): chart" in body["stderr"]
+
+
+def test_execution_fails_when_declared_chart_is_not_created(client: TestClient):
+    proposal = create_proposal(client)
+    edited_code = """
+import matplotlib.pyplot as plt
+work_df = df.copy()
+if "missing_date" not in work_df.columns:
+    print("LỖI: Không tìm thấy cột ngày tháng.")
+else:
+    plt.figure()
+    plt.plot([1, 2, 3], [1, 4, 9])
+    plt.savefig(outputs_dir / "chart.png")
+"""
+    update_response = client.patch(
+        f"/api/ai/proposals/{proposal['proposal_id']}",
+        json={"edited_by": "tester", "edited_code": edited_code},
+    )
+    assert update_response.status_code == 200
+    approval = approve_proposal(client, proposal["proposal_id"])
+
+    execution = client.post(
+        "/api/executions",
+        json={
+            "proposal_id": proposal["proposal_id"],
+            "dataset_id": "sales_2025",
+            "code_hash": approval["code_hash"],
+            "requested_by": "tester",
+        },
+    )
+
+    assert execution.status_code == 200
+    body = execution.json()
+    assert body["status"] == "failed"
+    assert body["return_code"] == 0
+    assert body["ai_insight_status"] == "not_requested"
+    assert "did not create expected artifact(s): chart" in body["stderr"]
+
+
+def test_execution_still_succeeds_when_ai_insight_fails(client: TestClient, monkeypatch):
+    proposal = create_proposal(client)
+    approval = approve_proposal(client, proposal["proposal_id"])
+
+    def fail_insight(**kwargs):
+        raise RuntimeError("insight provider unavailable")
+
+    monkeypatch.setattr(execution_runner, "explain_execution_result", fail_insight)
+    response = client.post(
+        "/api/executions",
+        json={
+            "proposal_id": proposal["proposal_id"],
+            "dataset_id": "sales_2025",
+            "code_hash": approval["code_hash"],
+            "requested_by": "tester",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "succeeded"
+    assert body["ai_insight_status"] == "failed"
+    assert "insight provider unavailable" in body["ai_insight_error"]

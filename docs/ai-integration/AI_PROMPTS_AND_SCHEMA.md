@@ -12,13 +12,20 @@ Khi dung ds2api, nen uu tien model khong thinking cho thao tac tao proposal/code
 AI_PROVIDER=deepseek
 DEEPSEEK_BASE_URL=http://127.0.0.1:5001
 DEEPSEEK_MODEL=deepseek-v4-flash-nothinking
+DEEPSEEK_INSIGHT_MODEL=deepseek-v4-flash-nothinking
 DEEPSEEK_MAX_TOKENS=2200
+DEEPSEEK_INSIGHT_MAX_TOKENS=900
 DEEPSEEK_TEMPERATURE=0.2
 DEEPSEEK_TIMEOUT_SECONDS=60
 DEEPSEEK_THINKING=disabled
+AI_EXPLAIN_RESULT_ENABLED=true
+AI_EXPLAIN_RESULT_PROVIDER=deepseek
+AI_EXPLAIN_RESULT_TIMEOUT_SECONDS=45
+EXECUTION_TIMEOUT_SECONDS=60
 ```
 
 Ly do: ung dung can code de nguoi dung review, khong can model sinh reasoning dai. Sau moi lan generate, xem `ai.proposal.generated` trong Logs de kiem tra `llm_duration_ms`, token usage va cache hit/miss.
+Sau moi lan execution thanh cong, ds2api/DeepSeek nhan xet dua tren stdout, table preview va artifact metadata that. Bieu do chi la minh hoa truc quan, khong phai nguon so lieu chinh cho AI. Prompt insight la evidence-only: khong gui code dai vao buoc nhan xet va cam model nhac nhom/dia danh/cot neu chuoi do khong xuat hien trong evidence.
 
 ## UX latency
 
@@ -30,13 +37,17 @@ Generate -> job_id -> poll status -> proposal_id -> hien code cho nguoi dung rev
 
 Flow nay khong lam model chay nhanh hon, nhung tranh cam giac UI bi dung trong 20+ giay khi dung ds2api.
 
-Prompt khong duoc de AI tra ve markdown lan man. Provider that nhu Gemini/OpenAI/Ollama can tra JSON dung schema de backend validate truoc khi hien thi cho frontend.
+Prompt khong duoc de AI tra ve markdown lan man. Provider that nhu DeepSeek/OpenAI-compatible/Ollama can tra JSON dung schema de backend validate truoc khi hien thi cho frontend.
 
 Implementation source:
 
 ```text
 backend/app/services/prompt_builder.py
+backend/app/services/analysis_intent.py
+backend/app/services/dataset_capabilities.py
 ```
+
+Truoc khi goi LLM, backend dung `AnalysisIntentPlanner` de phan loai prompt thanh cac intent tong quat: distribution, correlation, group comparison, time series, revenue/profit, funnel/conversion, retention va coordinate map. Planner doi chieu intent voi capability that cua dataset. Neu thieu cot bat buoc, backend tra proposal text-only va khong cho AI tu ve chart thay the. Neu du capability, user prompt payload van gui `ke_hoach_phan_tich_backend` cho LLM de giam nguy co sinh code lech schema.
 
 ## Nguyen tac prompt bat buoc
 
@@ -69,6 +80,9 @@ Quy tac bat buoc:
 - Khong duoc tu y them so lieu, ten cot, hinh anh, bieu do hoac ket qua khong co trong context.
 - Khong duoc ket luan bang so lieu neu chua co ket qua thuc thi/artifact.
 - Code Python phai gia dinh dataframe dau vao ten la df.
+- Chi duoc dung ten cot xuat hien trong dataset context. Khong duoc gia dinh cac cot nhu `date`, `month`, `ngay_dang`, `revenue` neu schema khong co.
+- Neu yeu cau can cot khong ton tai, AI phai tao proposal text-only de giai thich ly do va goi y huong phan tich thay the bang cot co that.
+- Neu code co nhanh validation phat hien khong the tao artifact da hua, code phai `raise ValueError` de backend danh dau failed, khong duoc chi `print()` loi roi ket thuc return code 0.
 - Truoc khi bien doi du lieu, code phai tao ban sao: work_df = df.copy().
 - Khong duoc sua df goc, khong duoc ghi de dataset goc.
 - Chi duoc ghi output vao outputs_dir do backend cung cap.
@@ -106,7 +120,24 @@ Backend gui user prompt duoi dang JSON:
       }
     ]
   },
-  "allowed_libraries": ["pandas", "numpy", "matplotlib", "seaborn", "math", "statistics"],
+  "allowed_libraries": [
+    "pandas",
+    "numpy",
+    "matplotlib",
+    "seaborn",
+    "scipy.stats",
+    "scipy.optimize",
+    "scipy.signal",
+    "sklearn.metrics",
+    "sklearn.model_selection",
+    "sklearn.preprocessing",
+    "sklearn.linear_model",
+    "statsmodels.api",
+    "statsmodels.formula.api",
+    "statsmodels.tsa",
+    "math",
+    "statistics"
+  ],
   "runtime_contract": {
     "input_dataframe_name": "df",
     "output_directory_variable": "outputs_dir",

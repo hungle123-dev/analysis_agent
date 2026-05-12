@@ -26,12 +26,10 @@ export function BottomPanel({
       <button
         aria-label="Resize bottom panel"
         type="button"
-        className="absolute -top-2 left-0 z-30 flex h-5 w-full touch-none cursor-row-resize items-start justify-center border-0 bg-transparent p-0 outline-none [--resize-line:rgba(220,227,239,0.12)] hover:[--resize-line:rgba(124,207,255,0.42)] focus-visible:ring-1 focus-visible:ring-accent focus-visible:ring-offset-0 focus-visible:[--resize-line:rgba(124,207,255,0.65)]"
+        className="absolute -top-[3px] left-0 z-30 h-[6px] w-full touch-none cursor-row-resize border-0 bg-transparent outline-none hover:bg-accent/70 focus-visible:bg-accent/70 transition-colors"
         onPointerDown={onResizeStart}
-        title="Kéo lên/xuống để chỉnh chiều cao Output / Logs"
-      >
-        <span className="mt-[10px] h-[3px] w-14 rounded-full bg-[var(--resize-line)] transition-colors" aria-hidden />
-      </button>
+        title="Resize panel"
+      />
       <div className="flex items-center justify-between border-b border-line bg-tabs px-2">
         <div className="flex h-full">
           {tabs.map(({ id, label, icon: Icon }) => (

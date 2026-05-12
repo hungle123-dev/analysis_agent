@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from backend.app.schemas import CreateProposalRequest, DatasetContext
-from backend.app.services.llm_provider import ProposalDraft
+from backend.app.services.llm_provider import ExecutionInsightDraft, ExecutionInsightInput, ProposalDraft
 
 
 class MockLLMProvider:
@@ -9,20 +9,39 @@ class MockLLMProvider:
 
     def create_proposal(self, payload: CreateProposalRequest, context: DatasetContext) -> ProposalDraft:
         return ProposalDraft(
-            summary=f"Generate local analysis code for: {payload.user_request}",
+            summary=f"Tạo code phân tích local cho yêu cầu: {payload.user_request}",
             code=generate_mock_code(context.id),
             explanation=(
                 "Code tao ban sao dataframe, chuan hoa cot date neu co, tinh bang tong hop, "
                 "ve chart bang matplotlib va luu artifact vao outputs_dir."
             ),
             assumptions=[
-                "Input dataframe is available as df",
-                "outputs_dir is provided by local runner",
-                "Generated code must be reviewed and approved by a human before execution",
+                "Dataframe đầu vào đã có sẵn với tên df",
+                "Biến outputs_dir được local runner cung cấp để lưu artifact",
+                "Code sinh ra phải được con người xem xét và phê duyệt trước khi thực thi",
             ],
             risk_flags=["creates_chart_file", "creates_table_stdout"],
             expected_outputs=["table", "chart", "log"],
             metadata={"provider": self.name, "model": "mock", "llm_duration_ms": 0},
+        )
+
+    def explain_execution_result(self, payload: ExecutionInsightInput) -> ExecutionInsightDraft:
+        chart_names = [artifact["name"] for artifact in payload.artifacts if artifact.get("type") == "chart"]
+        table_names = [artifact["name"] for artifact in payload.artifacts if artifact.get("type") == "table"]
+        parts = [
+            "AI đã đọc kết quả thực thi local và tạo nhận xét dựa trên artifact thật.",
+            f"Yêu cầu ban đầu: {payload.user_request}",
+        ]
+        if chart_names:
+            parts.append(f"Biểu đồ đã tạo: {', '.join(chart_names)}.")
+        if table_names:
+            parts.append(f"Bảng kết quả đã tạo: {', '.join(table_names)}.")
+        if payload.stdout.strip():
+            parts.append("Stdout có dữ liệu bảng/tóm tắt để đối chiếu với biểu đồ.")
+        parts.insert(0, "MOCK INSIGHT: đây là nhận xét giả lập cho test/dev, không phải kết quả model thật.")
+        return ExecutionInsightDraft(
+            insight=" ".join(parts),
+            metadata={"provider": self.name, "model": "mock", "llm_duration_ms": 0, "used_table_previews": len(payload.table_previews)},
         )
 
 

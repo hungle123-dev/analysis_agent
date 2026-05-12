@@ -2,7 +2,11 @@ import React from "react";
 import { AlertTriangle, Check } from "lucide-react";
 
 const defaultRules = [
-  ["Import allowlist", "Only pandas, numpy, matplotlib, seaborn, math, and statistics are allowed."],
+  [
+    "Import allowlist",
+    "Allows pandas, numpy, matplotlib, seaborn, scipy stats/optimization, sklearn analysis modules, statsmodels, math, statistics, datetime, and collections."
+  ],
+  ["Dataset boundary", "Code may use only the loaded df and must not read extra files or sample datasets."],
   ["No shell access", "os.system, subprocess, socket, requests, urllib are blocked."],
   ["Output scoped", "Generated files must stay under outputs/{run_id}."],
   ["Approval required", "Execution rejects proposals without matching approved code hash."]

@@ -21,8 +21,10 @@ import { TitleBar } from "./components/workbench/TitleBar";
 
 const ProposalCodeEditor = lazy(() => import("./components/workbench/ProposalCodeEditor"));
 // ds2api / local gateways often take ~60s+ per completion; leave headroom for queue + profiling.
-const PROPOSAL_JOB_POLL_INTERVAL_MS = 2000;
-const PROPOSAL_JOB_MAX_POLLS = 300;
+const CURRENT_USER_ID = import.meta.env.VITE_CURRENT_USER_ID ?? "student_01";
+const SESSION_ID = import.meta.env.VITE_SESSION_ID ?? "demo_01";
+const PROPOSAL_JOB_POLL_INTERVAL_MS = Number(import.meta.env.VITE_PROPOSAL_JOB_POLL_INTERVAL_MS ?? 2000);
+const PROPOSAL_JOB_MAX_POLLS = Number(import.meta.env.VITE_PROPOSAL_JOB_MAX_POLLS ?? 300);
 
 const EMPTY_CODE = `# Code proposal will appear here after AI generates it.
 # AI-generated code must be reviewed, edited if needed, and approved before local execution.`;
@@ -73,7 +75,7 @@ const normalizePolicyIssues = (issues) =>
 export default function App() {
   const [datasets, setDatasets] = useState([]);
   const [activeDatasetId, setActiveDatasetId] = useState("");
-  const [prompt, setPrompt] = useState("Ve bieu do doanh thu theo thang va nhan xet xu huong.");
+  const [prompt, setPrompt] = useState("Hay de xuat va ve mot bieu do phu hop voi dataset hien tai, kem bang so lieu va nhan xet cac diem noi bat.");
   const [code, setCode] = useState(EMPTY_CODE);
   const [status, setStatus] = useState("pending_review");
   /** Lưu audit theo trace_id — lần prompt sau không làm mất trace cũ. */
@@ -191,10 +193,10 @@ export default function App() {
     setIsGenerating(true);
     setProposalJob(null);
     setStatus("generating");
-    addEvent("ai.proposal.job_started", "student_01", "Starting background proposal generation");
+    addEvent("ai.proposal.job_started", CURRENT_USER_ID, "Starting background proposal generation");
     try {
       const job = await api.createProposalJob({
-        session_id: "demo_01",
+        session_id: SESSION_ID,
         dataset_id: activeDatasetId,
         user_request: prompt,
         mode: "generate_code"
@@ -216,7 +218,14 @@ export default function App() {
     } catch (err) {
       setPolicyIssues(normalizePolicyIssues(err?.detail?.policy_errors));
       setError(err.message);
-      setStatus("failed");
+      if (err?.isProposalPollTimeout) {
+        setStatus("generating");
+        if (err.proposalJob) {
+          setProposalJob(err.proposalJob);
+        }
+      } else {
+        setStatus("failed");
+      }
     } finally {
       setIsGenerating(false);
     }
@@ -234,7 +243,12 @@ export default function App() {
 
       await new Promise((resolve) => window.setTimeout(resolve, PROPOSAL_JOB_POLL_INTERVAL_MS));
     }
-    throw new Error(`Proposal job ${jobId} timed out in frontend polling`);
+    const timeoutError = new Error(
+      `AI job ${jobId} vẫn đang chạy quá lâu ở backend. Hãy kiểm tra ds2api/model hoặc thử yêu cầu hẹp hơn.`
+    );
+    timeoutError.isProposalPollTimeout = true;
+    timeoutError.proposalJob = latest;
+    throw timeoutError;
   }
 
   function updateCode(value) {
@@ -249,11 +263,11 @@ export default function App() {
     setIsApproving(true);
     try {
       const updated = await api.updateProposal(proposal.proposal_id, {
-        edited_by: "student_01",
+        edited_by: CURRENT_USER_ID,
         edited_code: code
       });
       const approval = await api.approveProposal(proposal.proposal_id, {
-        approved_by: "student_01",
+        approved_by: CURRENT_USER_ID,
         approval_note: "Approved from frontend review gate"
       });
       setProposal({ ...updated, status: approval.status, code_hash: approval.code_hash });
@@ -275,7 +289,7 @@ export default function App() {
     setIsRejecting(true);
     try {
       const rejected = await api.rejectProposal(proposal.proposal_id, {
-        rejected_by: "student_01",
+        rejected_by: CURRENT_USER_ID,
         rejection_reason: "Rejected from frontend review gate"
       });
       setProposal(rejected);
@@ -302,7 +316,7 @@ export default function App() {
         proposal_id: proposal.proposal_id,
         dataset_id: proposal.dataset_id,
         code_hash: proposal.code_hash,
-        requested_by: "student_01"
+        requested_by: CURRENT_USER_ID
       });
       setExecutionResult(result);
       setStatus(result.status);

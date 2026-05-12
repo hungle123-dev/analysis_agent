@@ -32,13 +32,56 @@ def test_policy_accepts_common_safe_analysis_imports():
     code = """
 from collections import Counter
 from matplotlib.ticker import FuncFormatter
+from scipy import stats
+from scipy.stats import pearsonr, spearmanr
+from sklearn import metrics, preprocessing
+from sklearn.metrics import r2_score
+from sklearn.model_selection import train_test_split
+from statsmodels.tsa.seasonal import seasonal_decompose
 import matplotlib.dates as mdates
+import matplotlib.ticker as ticker
+import scipy.stats as scipy_stats
+import sklearn.linear_model as linear_model
+import statsmodels.api as sm
+import seaborn as sb
+import warnings
+import re
+import unicodedata
+warnings.filterwarnings("ignore")
 print(Counter(["a", "b", "a"]))
+print(re.sub(r"\\s+", " ", "a   b"))
+print(unicodedata.normalize("NFC", "test"))
 print(FuncFormatter)
 print(mdates.DateFormatter)
+print(ticker.FuncFormatter)
+print(stats.pearsonr([1, 2, 3], [1, 3, 5]))
+print(pearsonr([1, 2, 3], [1, 3, 5]))
+print(spearmanr([1, 2, 3], [1, 3, 5]))
+print(scipy_stats.spearmanr([1, 2, 3], [1, 3, 5]))
+print(metrics.r2_score([1, 2, 3], [1, 2, 4]))
+print(preprocessing.StandardScaler)
+print(r2_score([1, 2, 3], [1, 2, 4]))
+print(train_test_split)
+print(seasonal_decompose)
+print(linear_model.LinearRegression)
+print(sm.OLS)
+print(sb)
 """
     issues = validate_code(code)
     assert issues == []
+
+
+def test_policy_blocks_analysis_imports_that_can_bypass_dataset_rule():
+    code = """
+from scipy.io import loadmat
+from sklearn.datasets import load_iris
+from statsmodels.datasets import get_rdataset
+"""
+    issues = validate_code(code)
+    messages = "\n".join(issue["message"] for issue in issues)
+    assert "from scipy.io import loadmat" in messages
+    assert "from sklearn.datasets import load_iris" in messages
+    assert "from statsmodels.datasets import get_rdataset" in messages
 
 
 def test_policy_accepts_safe_output_path_variables():
@@ -72,6 +115,11 @@ df.to_csv(bad_path, index=False)
 
 def test_policy_blocks_wrong_output_extension_for_writer():
     issues = validate_code("work_df = df.copy()\nwork_df.to_csv(outputs_dir / 'summary.txt', index=False)")
+    assert any(issue["code"] == "unsafe_output_path" for issue in issues)
+
+
+def test_policy_blocks_non_image_chart_outputs():
+    issues = validate_code("import matplotlib.pyplot as plt\nplt.savefig(outputs_dir / 'chart.pdf')")
     assert any(issue["code"] == "unsafe_output_path" for issue in issues)
 
 

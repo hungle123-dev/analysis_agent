@@ -13,7 +13,10 @@ class PolicyIssue(TypedDict):
 ALLOWED_IMPORTS = {
     "collections",
     "math",
+    "re",
     "statistics",
+    "unicodedata",
+    "warnings",
     "numpy",
     "numpy as np",
     "pandas",
@@ -27,6 +30,8 @@ ALLOWED_IMPORTS = {
     "matplotlib.ticker as mtick",
     "seaborn",
     "seaborn as sns",
+    "scipy.stats",
+    "scipy.stats as stats",
     "datetime",
     "datetime.date",
     "datetime.datetime",
@@ -34,11 +39,62 @@ ALLOWED_IMPORTS = {
     "datetime.timezone",
 }
 
+SAFE_IMPORT_MODULE_PREFIXES = {
+    "numpy",
+    "pandas",
+    "matplotlib",
+    "seaborn",
+    "scipy.cluster",
+    "scipy.interpolate",
+    "scipy.linalg",
+    "scipy.optimize",
+    "scipy.signal",
+    "scipy.spatial",
+    "scipy.special",
+    "scipy.stats",
+    "sklearn.cluster",
+    "sklearn.compose",
+    "sklearn.decomposition",
+    "sklearn.ensemble",
+    "sklearn.impute",
+    "sklearn.linear_model",
+    "sklearn.metrics",
+    "sklearn.model_selection",
+    "sklearn.naive_bayes",
+    "sklearn.neighbors",
+    "sklearn.pipeline",
+    "sklearn.preprocessing",
+    "sklearn.svm",
+    "sklearn.tree",
+    "statsmodels.api",
+    "statsmodels.formula.api",
+    "statsmodels.tsa",
+}
+
+ALLOWED_IMPORT_MODULES = {item.split(" as ", 1)[0] for item in ALLOWED_IMPORTS} | SAFE_IMPORT_MODULE_PREFIXES
+
 ALLOWED_FROM_IMPORTS = {
     "collections": {"Counter", "defaultdict"},
     "datetime": {"date", "datetime", "timedelta", "timezone"},
     "matplotlib.dates": {"AutoDateLocator", "ConciseDateFormatter", "DateFormatter", "MonthLocator", "YearLocator"},
     "matplotlib.ticker": {"FuncFormatter", "MaxNLocator", "PercentFormatter", "StrMethodFormatter"},
+    "scipy": {"cluster", "interpolate", "linalg", "optimize", "signal", "spatial", "special", "stats"},
+    "sklearn": {
+        "cluster",
+        "compose",
+        "decomposition",
+        "ensemble",
+        "impute",
+        "linear_model",
+        "metrics",
+        "model_selection",
+        "naive_bayes",
+        "neighbors",
+        "pipeline",
+        "preprocessing",
+        "svm",
+        "tree",
+    },
 }
 
 FORBIDDEN_MODULE_PREFIXES = {
@@ -134,7 +190,7 @@ OUTPUT_WRITER_CALLS = {
 }
 
 OUTPUT_WRITER_EXTENSIONS = {
-    "savefig": {".png", ".jpg", ".jpeg", ".svg", ".webp", ".pdf"},
+    "savefig": {".png", ".jpg", ".jpeg", ".webp"},
     "to_csv": {".csv"},
     "to_excel": {".xlsx"},
     "to_html": {".html"},
@@ -183,7 +239,7 @@ def validate_code(code: str) -> list[PolicyIssue]:
         if isinstance(node, ast.Import):
             for alias in node.names:
                 import_name = _format_import(alias.name, alias.asname)
-                if _is_forbidden_module(alias.name) or import_name not in ALLOWED_IMPORTS:
+                if _is_forbidden_module(alias.name) or not _is_allowed_import_module(alias.name):
                     add("blocked_import", f"Import khong duoc phep: {import_name}")
 
         if isinstance(node, ast.ImportFrom):
@@ -193,7 +249,11 @@ def validate_code(code: str) -> list[PolicyIssue]:
             else:
                 for alias in node.names:
                     import_name = f"{module}.{alias.name}" if module else alias.name
-                    if not _is_allowed_from_import(module, alias.name) and import_name not in ALLOWED_IMPORTS:
+                    if (
+                        not _is_allowed_from_import(module, alias.name)
+                        and not _is_allowed_import_module(module)
+                        and not _is_allowed_import_module(import_name)
+                    ):
                         add("blocked_import", f"Import khong duoc phep: from {module} import {alias.name}")
 
         if isinstance(node, ast.Call):
@@ -297,6 +357,10 @@ def _format_import(name: str, asname: str | None) -> str:
 def _is_forbidden_module(module: str) -> bool:
     root = module.split(".", 1)[0]
     return root in FORBIDDEN_MODULE_PREFIXES
+
+
+def _is_allowed_import_module(module: str) -> bool:
+    return any(module == allowed or module.startswith(f"{allowed}.") for allowed in ALLOWED_IMPORT_MODULES)
 
 
 def _is_allowed_from_import(module: str, name: str) -> bool:

@@ -4,12 +4,15 @@
 .env
 .env.*
 !.env.example
+!ds2api/.env.example
+ds2api/config.json
 .venv/
 frontend/node_modules/
 frontend/dist/
 frontend/vite-dev.log
 frontend/vite-dev.err.log
 frontend/playwright-*.png
+.runtime-logs/
 backend-dev.log
 backend-dev.err.log
 backend/.test-runtime/

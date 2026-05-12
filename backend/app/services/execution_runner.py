@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import json
 import os
 import subprocess
@@ -13,6 +14,7 @@ from backend.app.core.paths import ROOT, RUNS_DIR
 from backend.app.db.storage import append_event, connect, now_iso
 from backend.app.schemas import ExecutionRequest, ExecutionResponse
 from backend.app.services.dataset_service import get_dataset_path
+from backend.app.services.execution_insight_service import explain_execution_result
 from backend.app.services.policy_checker import validate_code
 
 
@@ -38,6 +40,8 @@ def execute_proposal(payload: ExecutionRequest) -> ExecutionResponse:
         result = run_code(run_id, payload.dataset_id, code)
     except Exception as exc:
         result = _failed_run_result(str(exc))
+    _validate_expected_artifacts(result, code, proposal)
+    _attach_ai_insight(result, proposal, code)
     append_event(proposal["trace_id"], f"execution.{result['status']}", "system", {"run_id": run_id})
 
     with connect() as conn:
@@ -45,9 +49,10 @@ def execute_proposal(payload: ExecutionRequest) -> ExecutionResponse:
             """
             INSERT INTO executions(
               run_id, proposal_id, status, stdout, stderr, artifacts_json,
+              ai_insight, ai_insight_status, ai_insight_error,
               started_at, finished_at, duration_ms, return_code
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 run_id,
@@ -56,6 +61,9 @@ def execute_proposal(payload: ExecutionRequest) -> ExecutionResponse:
                 result["stdout"],
                 result["stderr"],
                 result["artifacts_json"],
+                result["ai_insight"],
+                result["ai_insight_status"],
+                result["ai_insight_error"],
                 result["started_at"],
                 result["finished_at"],
                 result["duration_ms"],
@@ -74,6 +82,9 @@ def execute_proposal(payload: ExecutionRequest) -> ExecutionResponse:
         stdout=result["stdout"],
         stderr=result["stderr"],
         artifacts=result["artifacts"],
+        ai_insight=result["ai_insight"],
+        ai_insight_status=result["ai_insight_status"],
+        ai_insight_error=result["ai_insight_error"],
         return_code=result["return_code"],
         duration_ms=result["duration_ms"],
         started_at=result["started_at"],
@@ -113,9 +124,9 @@ def _set_proposal_status(proposal_id: str, status: str) -> None:
 
 def run_code(run_id: str, dataset_id: str, code: str) -> dict:
     try:
-        timeout_seconds = max(1, int(os.getenv("EXECUTION_TIMEOUT_SECONDS", "30")))
+        timeout_seconds = max(1, int(os.getenv("EXECUTION_TIMEOUT_SECONDS", "60")))
     except ValueError:
-        timeout_seconds = 30
+        timeout_seconds = 60
     started_at = now_iso()
     started_dt = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
     run_dir = RUNS_DIR / run_id
@@ -176,6 +187,9 @@ exec(compile(user_code, {str(code_path)!r}, "exec"), {{"df": df, "pd": pd, "plt"
         "stderr": stderr,
         "artifacts": artifacts,
         "artifacts_json": json.dumps(artifacts),
+        "ai_insight": None,
+        "ai_insight_status": "not_requested",
+        "ai_insight_error": None,
         "started_at": started_at,
         "finished_at": finished_at,
         "duration_ms": int((finished_dt - started_dt).total_seconds() * 1000),
@@ -191,6 +205,9 @@ def _failed_run_result(message: str) -> dict:
         "stderr": _limit_output(message),
         "artifacts": [],
         "artifacts_json": "[]",
+        "ai_insight": None,
+        "ai_insight_status": "not_requested",
+        "ai_insight_error": None,
         "started_at": finished_at,
         "finished_at": finished_at,
         "duration_ms": 0,
@@ -217,3 +234,99 @@ def _infer_artifact_type(path) -> str:
     if suffix in {".txt", ".log"}:
         return "log"
     return "text"
+
+
+def _validate_expected_artifacts(result: dict, code: str, proposal: dict) -> None:
+    if result["status"] != "succeeded":
+        return
+
+    expected_types = _expected_output_types(proposal)
+    required_artifacts = _declared_output_types(code) | expected_types
+    if not required_artifacts:
+        return
+
+    artifact_types = {artifact["type"] for artifact in result["artifacts"]}
+    missing = sorted(required_artifacts - artifact_types)
+    if not missing:
+        return
+
+    result["status"] = "failed"
+    message = (
+        "Execution completed with return_code=0 but did not create expected artifact(s): "
+        f"{', '.join(missing)}. Check generated code branches and dataset columns."
+    )
+    result["stderr"] = _limit_output((result["stderr"] + "\n" + message).strip())
+
+
+def _expected_output_types(proposal: dict) -> set[str]:
+    try:
+        outputs = json.loads(proposal["expected_outputs_json"])
+    except (KeyError, TypeError, json.JSONDecodeError):
+        return set()
+    if not isinstance(outputs, list):
+        return set()
+    return {str(item) for item in outputs if str(item) == "chart"}
+
+
+def _declared_output_types(code: str) -> set[str]:
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return set()
+
+    declared: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            continue
+        if node.func.attr == "savefig":
+            declared.add("chart")
+        if node.func.attr in {"to_csv", "to_excel", "to_html", "to_json", "to_markdown", "to_parquet"}:
+            declared.add("table")
+    return declared
+
+
+def _attach_ai_insight(result: dict, proposal: dict, code: str) -> None:
+    if result["status"] != "succeeded":
+        result["ai_insight_status"] = "not_requested"
+        result["ai_insight"] = None
+        result["ai_insight_error"] = "Execution did not succeed."
+        return
+
+    try:
+        insight = explain_execution_result(
+            root=ROOT,
+            user_request=proposal["user_request"],
+            code=code,
+            stdout=result["stdout"],
+            stderr=result["stderr"],
+            artifacts=result["artifacts"],
+        )
+    except Exception as exc:
+        result["ai_insight_status"] = "failed"
+        result["ai_insight"] = None
+        result["ai_insight_error"] = _limit_output(str(exc))
+        append_event(
+            proposal["trace_id"],
+            "execution.ai_insight.failed",
+            "ai",
+            {"error": result["ai_insight_error"]},
+        )
+        return
+
+    result["ai_insight_status"] = insight["status"]
+    result["ai_insight"] = insight["insight"]
+    result["ai_insight_error"] = insight["error"]
+    if insight["status"] == "succeeded":
+        append_event(
+            proposal["trace_id"],
+            "execution.ai_insight.succeeded",
+            "ai",
+            {"metadata": insight["metadata"]},
+        )
+    elif insight["status"] == "failed":
+        append_event(
+            proposal["trace_id"],
+            "execution.ai_insight.failed",
+            "ai",
+            {"error": insight["error"], "metadata": insight["metadata"]},
+        )

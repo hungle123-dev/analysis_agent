@@ -11,6 +11,7 @@ from backend.app.schemas import ColumnInfo, DatasetContext, DatasetSummary
 
 DATASET_CONFIG_PATH = ROOT / "backend" / "config" / "datasets.json"
 CSV_CHUNK_SIZE = 50_000
+NUMERIC_PROFILE_MAX_VALUES = 100_000
 _REGISTRY_CACHE: dict[str, dict[str, Any]] | None = None
 _REGISTRY_CACHE_MTIME_NS: int | None = None
 _REGISTRY_CACHE_PATH: Path | None = None
@@ -195,6 +196,9 @@ def get_dataset_context(dataset_id: str) -> DatasetContext:
             dtype=profile["dtypes"].get(name, "object"),
             nullable_count=profile["null_counts"].get(name, 0),
             sample_values=profile["sample_values"].get(name, []),
+            unique_count=profile["unique_counts"].get(name),
+            top_values=profile["top_values"].get(name, []),
+            numeric_summary=profile["numeric_summary"].get(name, {}),
         )
         for name in profile["columns"]
     ]
@@ -272,6 +276,9 @@ def _profile_csv(dataset_path: Path) -> dict[str, Any]:
     dtypes = {column: str(dtype) for column, dtype in header.dtypes.items()}
     null_counts = {column: 0 for column in columns}
     sample_values: dict[str, list[Any]] = {column: [] for column in columns}
+    unique_values: dict[str, set[Any]] = {column: set() for column in columns}
+    top_value_counts: dict[str, dict[str, int]] = {column: {} for column in columns}
+    numeric_series_values: dict[str, list[float]] = {column: [] for column in columns}
     row_count = 0
 
     for chunk in pd.read_csv(dataset_path, chunksize=CSV_CHUNK_SIZE):
@@ -283,11 +290,69 @@ def _profile_csv(dataset_path: Path) -> dict[str, Any]:
             remaining = 3 - len(sample_values[column])
             if remaining > 0:
                 sample_values[column].extend(chunk[column].dropna().head(remaining).tolist())
+            non_null = chunk[column].dropna()
+            if len(unique_values[column]) <= 1000:
+                unique_values[column].update(non_null.drop_duplicates().head(1001).tolist())
+            if _is_categorical_dtype(str(chunk[column].dtype)):
+                for value, count in non_null.astype(str).value_counts().head(20).items():
+                    top_value_counts[column][value] = top_value_counts[column].get(value, 0) + int(count)
+            if _is_numeric_dtype(str(chunk[column].dtype)):
+                numeric_values = pd.to_numeric(non_null, errors="coerce").dropna()
+                if not numeric_values.empty:
+                    remaining = NUMERIC_PROFILE_MAX_VALUES - len(numeric_series_values[column])
+                    if remaining > 0:
+                        numeric_series_values[column].extend(numeric_values.head(remaining).tolist())
 
     return {
         "columns": columns,
         "dtypes": dtypes,
         "null_counts": null_counts,
         "sample_values": sample_values,
+        "unique_counts": {
+            column: (len(values) if len(values) <= 1000 else 1001)
+            for column, values in unique_values.items()
+        },
+        "top_values": {
+            column: [
+                {"value": value, "count": count}
+                for value, count in sorted(counts.items(), key=lambda item: item[1], reverse=True)[:5]
+            ]
+            for column, counts in top_value_counts.items()
+        },
+        "numeric_summary": {
+            column: _numeric_summary(values)
+            for column, values in numeric_series_values.items()
+            if values
+        },
         "rows": row_count,
     }
+
+
+def _is_numeric_dtype(dtype: str) -> bool:
+    value = dtype.lower()
+    return any(token in value for token in ("int", "float", "double", "decimal")) and "bool" not in value
+
+
+def _is_categorical_dtype(dtype: str) -> bool:
+    value = dtype.lower()
+    return any(token in value for token in ("object", "string", "category", "bool"))
+
+
+def _numeric_summary(values: list[float]) -> dict[str, float | int | None]:
+    series = pd.Series(values)
+    return {
+        "count": int(series.count()),
+        "mean": _round_or_none(series.mean()),
+        "std": _round_or_none(series.std()),
+        "min": _round_or_none(series.min()),
+        "p25": _round_or_none(series.quantile(0.25)),
+        "median": _round_or_none(series.median()),
+        "p75": _round_or_none(series.quantile(0.75)),
+        "max": _round_or_none(series.max()),
+    }
+
+
+def _round_or_none(value: Any) -> float | None:
+    if pd.isna(value):
+        return None
+    return round(float(value), 4)

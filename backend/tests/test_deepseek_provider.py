@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from backend.app.services.deepseek_llm_provider import (
     _build_extra_body,
+    _build_extra_headers,
+    _build_execution_insight_messages,
     _normalize_openai_base_url,
     _parse_optional_int_env,
 )
+from backend.app.services.llm_provider import ExecutionInsightInput
 
 
 def test_normalize_base_url_appends_v1_by_default(monkeypatch):
@@ -38,3 +41,39 @@ def test_extra_body_merges_json_and_thinking(monkeypatch):
     monkeypatch.setenv("DEEPSEEK_THINKING", "disabled")
 
     assert _build_extra_body() == {"custom": True, "thinking": {"type": "disabled"}}
+
+
+def test_extra_headers_support_ds2api_target_account(monkeypatch):
+    monkeypatch.setenv("DS2API_TARGET_ACCOUNT", "student@example.com")
+    monkeypatch.delenv("DEEPSEEK_TARGET_ACCOUNT", raising=False)
+
+    assert _build_extra_headers() == {"X-Ds2-Target-Account": "student@example.com"}
+
+
+def test_extra_headers_support_legacy_deepseek_target_account(monkeypatch):
+    monkeypatch.delenv("DS2API_TARGET_ACCOUNT", raising=False)
+    monkeypatch.setenv("DEEPSEEK_TARGET_ACCOUNT", "backup@example.com")
+
+    assert _build_extra_headers() == {"X-Ds2-Target-Account": "backup@example.com"}
+
+
+def test_execution_insight_messages_are_text_only_and_grounded_in_local_outputs():
+    messages = _build_execution_insight_messages(
+        ExecutionInsightInput(
+            user_request="Ve bieu do doanh thu",
+            code="print('x')",
+            stdout="month revenue\n2025-01 100",
+            stderr="",
+            artifacts=[{"type": "chart", "name": "chart.png", "path": "runs/run_x/outputs/chart.png"}],
+            table_previews=[{"name": "summary.csv", "preview": "month,revenue\n2025-01,100"}],
+        )
+    )
+
+    content = messages[0]["content"]
+    assert isinstance(content, str)
+    assert "EVIDENCE" in content
+    assert "stdout" in content.lower()
+    assert "Preview bảng kết quả" in content
+    assert "Hình ảnh/biểu đồ chỉ là minh họa" in content
+    assert "print('x')" not in content
+    assert "image_url" not in content

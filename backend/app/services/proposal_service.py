@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import threading
 import uuid
 
@@ -14,14 +15,23 @@ from backend.app.schemas import (
     ApprovalResponse,
     ApproveProposalRequest,
     CreateProposalRequest,
+    DatasetContext,
     ProposalJobResponse,
     ProposalResponse,
     RejectProposalRequest,
     UpdateProposalRequest,
 )
 from backend.app.services.dataset_service import get_dataset_context
-from backend.app.services.llm_provider import get_llm_provider
+from backend.app.services.dataset_capabilities import (
+    analysis_suggestions,
+    infer_dataset_capabilities,
+    normalize_text,
+    serialize_capabilities,
+)
+from backend.app.services.analysis_intent import plan_analysis_request
+from backend.app.services.llm_provider import ProposalDraft, get_llm_provider
 from backend.app.services.policy_checker import validate_code
+
 
 def _proposal_job_max_concurrency() -> int:
     load_local_env()
@@ -48,30 +58,56 @@ def create_proposal(payload: CreateProposalRequest) -> ProposalResponse:
 
     proposal_id = f"prop_{uuid.uuid4().hex[:8]}"
     trace_id = f"trace_{uuid.uuid4().hex[:8]}"
-    provider = get_llm_provider()
-    try:
-        draft = provider.create_proposal(payload, context)
-    except RuntimeError as exc:
-        if _should_fallback_to_mock(provider.name):
-            from backend.app.services.mock_llm_provider import MockLLMProvider
+    draft = build_preflight_draft(payload, context)
+    provider = None
+    provider_name = "schema_preflight"
+    if draft is None:
+        provider = get_llm_provider()
+        provider_name = provider.name
+        try:
+            draft = provider.create_proposal(payload, context)
+        except RuntimeError as exc:
+            if _should_fallback_to_mock(provider.name):
+                from backend.app.services.mock_llm_provider import MockLLMProvider
 
-            fallback_provider = MockLLMProvider()
-            draft = fallback_provider.create_proposal(payload, context)
+                fallback_provider = MockLLMProvider()
+                draft = fallback_provider.create_proposal(payload, context)
+                append_event(
+                    trace_id,
+                    "ai.proposal.fallback_to_mock",
+                    "system",
+                    {"from_provider": provider.name, "reason": str(exc)},
+                )
+                provider_name = fallback_provider.name
+            else:
+                append_event(
+                    trace_id,
+                    "ai.proposal.generation_failed",
+                    "system",
+                    {"provider": provider.name, "error": str(exc)},
+                )
+                raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    draft = _normalize_runtime_contract_code(draft)
+    if provider is not None and provider_name != "mock" and _has_syntax_error(draft):
+        try:
+            retry_draft = provider.create_proposal(payload, context)
+            retry_draft = _normalize_runtime_contract_code(retry_draft)
+            if not _has_syntax_error(retry_draft):
+                draft = retry_draft
+                append_event(
+                    trace_id,
+                    "ai.proposal.syntax_retry_succeeded",
+                    "system",
+                    {"provider": provider.name},
+                )
+        except RuntimeError as exc:
             append_event(
                 trace_id,
-                "ai.proposal.fallback_to_mock",
-                "system",
-                {"from_provider": provider.name, "reason": str(exc)},
-            )
-            provider = fallback_provider
-        else:
-            append_event(
-                trace_id,
-                "ai.proposal.generation_failed",
+                "ai.proposal.syntax_retry_failed",
                 "system",
                 {"provider": provider.name, "error": str(exc)},
             )
-            raise HTTPException(status_code=503, detail=str(exc)) from exc
     now = now_iso()
     generation_metadata = draft.metadata or {}
     with connect() as conn:
@@ -101,14 +137,113 @@ def create_proposal(payload: CreateProposalRequest) -> ProposalResponse:
             ),
         )
 
-    append_event(trace_id, "ai.request.created", "student_01", payload.model_dump())
+    append_event(trace_id, "ai.request.created", _default_actor_id(), payload.model_dump())
     append_event(
         trace_id,
         "ai.proposal.generated",
         "ai",
-        {"proposal_id": proposal_id, "provider": provider.name, **generation_metadata},
+        {"proposal_id": proposal_id, "provider": provider_name, **generation_metadata},
     )
     return get_proposal(proposal_id)
+
+
+def build_preflight_draft(payload: CreateProposalRequest, context: DatasetContext) -> ProposalDraft | None:
+    if payload.mode != "generate_code":
+        return None
+
+    request_text = normalize_text(payload.user_request)
+    capabilities = infer_dataset_capabilities(context)
+    analysis_plan = plan_analysis_request(request_text, capabilities)
+    missing_reasons = analysis_plan.missing_reasons
+
+    if not missing_reasons:
+        return None
+
+    column_names = [column.name for column in context.columns]
+    suggestions = analysis_suggestions(context)
+    suggestions_text = "; ".join(suggestions) if suggestions else "chọn lại câu hỏi dựa trên các cột có thật trong dataset"
+    missing_text = "; ".join(missing_reasons)
+    available_columns = ", ".join(column_names)
+
+    code = f'''# Đoạn code này không vẽ biểu đồ vì schema hiện tại không đủ cột để thực hiện đúng yêu cầu.
+# Mục tiêu là hiển thị lý do rõ ràng để con người quyết định câu hỏi phân tích mới.
+work_df = df.copy()
+available_columns = list(work_df.columns)
+
+print("KHÔNG THỂ THỰC HIỆN CHÍNH XÁC YÊU CẦU PHÂN TÍCH.")
+print("Lý do: {missing_text}.")
+print("Dataset đang có các cột:")
+print(", ".join(available_columns))
+print("Gợi ý phân tích thay thế: {suggestions_text}.")
+'''
+
+    return ProposalDraft(
+        summary=(
+            "Yêu cầu hiện tại chưa thể thực hiện chính xác với dataset đang chọn vì "
+            f"{missing_text}. Backend tạo proposal text-only để tránh AI tự bịa cột hoặc tự vẽ biểu đồ sai."
+        ),
+        code=code,
+        explanation=(
+            "Đoạn code này chỉ tạo bản sao dữ liệu, in ra lý do không thể thực hiện đúng yêu cầu, "
+            "liệt kê các cột thật đang có và gợi ý hướng phân tích thay thế. Code không tạo biểu đồ "
+            "vì schema chưa có đủ cột phù hợp với yêu cầu."
+        ),
+        assumptions=[
+            "Không tự suy diễn cột gần giống thành đúng khái niệm người dùng yêu cầu nếu schema không xác nhận.",
+            "Không tự tạo cột thời gian/doanh thu/nhóm phân tích nếu dataset không có cột phù hợp.",
+            "Người dùng cần chọn lại câu hỏi phân tích dựa trên các cột thật trong schema.",
+        ],
+        risk_flags=["needs_human_check"],
+        expected_outputs=["text"],
+        metadata={
+            "preflight_reason": "missing_required_schema_columns",
+            "missing_reasons": missing_reasons,
+            "analysis_intents": analysis_plan.intent_names,
+            "recommended_strategy": analysis_plan.recommended_strategy,
+            "available_columns": column_names,
+            "dataset_capabilities": serialize_capabilities(capabilities),
+        },
+    )
+
+
+def _normalize_runtime_contract_code(draft: ProposalDraft) -> ProposalDraft:
+    """Loại bỏ các dòng luôn sai với runtime contract trước khi người dùng duyệt."""
+    code_lines: list[str] = []
+    removed: list[str] = []
+    for line in draft.code.splitlines():
+        stripped = line.strip()
+        if re.fullmatch(r"from\s+pathlib\s+import\s+Path", stripped):
+            removed.append(stripped)
+            continue
+        if re.fullmatch(r"import\s+pathlib(\s+as\s+\w+)?", stripped):
+            removed.append(stripped)
+            continue
+        if re.match(r"^outputs_dir\s*=", stripped):
+            removed.append(stripped)
+            continue
+        code_lines.append(line)
+
+    if not removed:
+        return draft
+
+    metadata = {**(draft.metadata or {}), "runtime_contract_normalized": removed}
+    assumptions = [
+        *draft.assumptions,
+        "Backend đã loại bỏ các dòng import pathlib/gán lại outputs_dir vì outputs_dir là biến runtime được cấp sẵn.",
+    ]
+    return ProposalDraft(
+        summary=draft.summary,
+        code="\n".join(code_lines).strip() + "\n",
+        explanation=draft.explanation,
+        assumptions=assumptions,
+        risk_flags=draft.risk_flags,
+        expected_outputs=draft.expected_outputs,
+        metadata=metadata,
+    )
+
+
+def _has_syntax_error(draft: ProposalDraft) -> bool:
+    return any(issue["code"] == "syntax_error" for issue in validate_code(draft.code))
 
 
 def create_proposal_job(payload: CreateProposalRequest) -> ProposalJobResponse:
@@ -289,4 +424,8 @@ def hash_code(code: str) -> str:
 def _should_fallback_to_mock(provider_name: str) -> bool:
     if provider_name == "mock":
         return False
-    return os.getenv("AI_FALLBACK_TO_MOCK_ON_ERROR", "true").strip().lower() in {"1", "true", "yes", "on"}
+    return os.getenv("AI_FALLBACK_TO_MOCK_ON_ERROR", "false").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _default_actor_id() -> str:
+    return os.getenv("DEFAULT_ACTOR_ID", "student_01")

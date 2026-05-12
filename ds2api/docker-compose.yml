@@ -1,0 +1,14 @@
+services:
+  ds2api:
+    image: ghcr.io/cjackhwang/ds2api:latest
+    container_name: ds2api
+    restart: always
+    ports:
+      - "${DS2API_HOST_PORT:-5001}:5001"
+    volumes:
+      - ./config.json:/data/config.json
+    environment:
+      - TZ=Asia/Ho_Chi_Minh
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - DS2API_ADMIN_KEY=${DS2API_ADMIN_KEY:-change-me}
+      - DS2API_CONFIG_PATH=/data/config.json
